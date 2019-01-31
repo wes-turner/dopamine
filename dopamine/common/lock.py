@@ -25,7 +25,7 @@ _LOCK_ATTR_NAME = '_lock'
 # TODO(aarg): Add a lock implementation that lets read operation occur at the
 # same time (i.e. less restrictive).
 class LockedClass(object):
-  def __init__(self, *args, **kwargs):
+  def __init__(self):
     if hasattr(self, _LOCK_ATTR_NAME):
       raise ValueError('Object already has a `{}` attribute.')
     setattr(self, _LOCK_ATTR_NAME, threading.Lock())
