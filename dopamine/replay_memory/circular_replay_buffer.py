@@ -30,7 +30,7 @@ import math
 import os
 import pickle
 
-from dopamine.common import lock
+from dopamine.utils import lock
 import numpy as np
 import tensorflow as tf
 

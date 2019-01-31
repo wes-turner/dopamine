@@ -17,7 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from dopamine.common import lock
+from dopamine.utils import lock
 from tensorflow import test
 
 
