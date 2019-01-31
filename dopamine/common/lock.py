@@ -25,6 +25,8 @@ _LOCK_ATTR_NAME = '_lock'
 # TODO(aarg): Add a lock implementation that lets read operation occur at the
 # same time (i.e. less restrictive).
 class LockedClass(object):
+  """Initializes an object with a lock attribute."""
+
   def __init__(self):
     if hasattr(self, _LOCK_ATTR_NAME):
       raise ValueError('Object already has a `{}` attribute.')
@@ -51,6 +53,6 @@ def locked_method(fn):
       raise AttributeError(
           'Object {} expected to have a `{}` attribute.'.format(
               self, _LOCK_ATTR_NAME))
-    with lock:  # pylint: disable=protected-access
+    with lock:
       return fn(self, *args, **kwargs)
   return _decorated
