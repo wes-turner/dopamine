@@ -667,7 +667,7 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     self.assertAllClose(memory.invalid_range, self._test_invalid_range)
 
   def test_memory_is_locked(self):
-    """Tests that the lock/unlock of the buffer's methods work properly."""
+    """Tests that the lock/unlock of the buffer's methods works properly."""
     memory = circular_replay_buffer.OutOfGraphReplayBuffer(
         observation_shape=(2,),
         stack_size=1,
@@ -687,6 +687,27 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     # Check that the lock is still active.
     with self.assertRaisesRegexp(ValueError, 'Lock is locked.'):
       add_op()
+    # Check that the second element was not added.
+    self.assertEqual(memory.add_count, 1)
+
+  def test_memory_is_not_locked(self):
+    """Tests that the lock/unlock of the buffer's methods works properly."""
+    memory = circular_replay_buffer.OutOfGraphReplayBuffer(
+        observation_shape=(2,),
+        stack_size=1,
+        replay_capacity=10,
+        batch_size=2)
+    memory._lock = _MockLock()
+    add_op = lambda: memory.add((1, 2), 0, 0, False)
+
+    # Check that buffer is empty at first.
+    self.assertEqual(memory.add_count, 0)
+    # Add one element.
+    add_op()
+    # Check that buffer contains one element.
+    self.assertEqual(memory.add_count, 1)
+    # Check that the lock went throughh the proper unlock process.
+    self.assertTrue(memory._lock.exited_properly())  # pylint: disable=protected-access
     memory._lock.unlock()  # pylint: disable=protected-access
     # Add another element.
     add_op()
@@ -874,7 +895,7 @@ class WrappedReplayBufferTest(tf.test.TestCase):
     self.assertEqual(replay.memory._store['observation'].dtype, np.int32)
 
   def test_replay_buffer_is_locked(self):
-    """Tests that the lock/unlock of the buffer's methods work properly."""
+    """Tests that the lock/unlock of the buffer's methods works properly."""
     replay = circular_replay_buffer.WrappedReplayBuffer(
         observation_shape=(2,),
         stack_size=1,
