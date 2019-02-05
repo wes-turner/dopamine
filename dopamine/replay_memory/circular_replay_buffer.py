@@ -30,7 +30,7 @@ import math
 import os
 import pickle
 
-from dopamine.utils import lock
+from dopamine.utils import lock as lock_lib
 import numpy as np
 import tensorflow as tf
 
@@ -79,7 +79,7 @@ def invalid_range(cursor, replay_capacity, stack_size, update_horizon):
        for i in range(stack_size + update_horizon)])
 
 
-class OutOfGraphReplayBuffer(lock.LockedClass):
+class OutOfGraphReplayBuffer(object):
   """A simple out-of-graph Replay Buffer.
 
   Stores transitions, state, action, reward, next_state, terminal (and any
@@ -110,7 +110,8 @@ class OutOfGraphReplayBuffer(lock.LockedClass):
                action_shape=(),
                action_dtype=np.int32,
                reward_shape=(),
-               reward_dtype=np.float32):
+               reward_dtype=np.float32,
+               lock=True):
     """Initializes OutOfGraphReplayBuffer.
 
     Args:
@@ -132,6 +133,8 @@ class OutOfGraphReplayBuffer(lock.LockedClass):
       reward_shape: tuple of ints, the shape of the reward vector. Empty tuple
         means the reward is a scalar.
       reward_dtype: np.dtype, type of elements in the reward.
+      lock: bool, indicates whether to protect specified methods against
+        concurrent access. If `True`, the lock applies to the decorated methods.
 
     Raises:
       ValueError: If replay_capacity is too small to hold at least one
@@ -178,7 +181,11 @@ class OutOfGraphReplayBuffer(lock.LockedClass):
     self._cumulative_discount_vector = np.array(
         [math.pow(self._gamma, n) for n in range(update_horizon)],
         dtype=np.float32)
-    super(OutOfGraphReplayBuffer, self).__init__()
+
+    if lock:
+      lock_lib.initialize_lock(self)
+    else:
+      lock_lib.initialize_lock(self, None)
 
   def _create_storage(self):
     """Creates the numpy arrays used to store transitions.
@@ -229,7 +236,7 @@ class OutOfGraphReplayBuffer(lock.LockedClass):
           np.zeros(element_type.shape, dtype=element_type.type))
     self._add(*zero_transition)
 
-  @lock.locked_method
+  @lock_lib.locked_method()
   def add(self, observation, action, reward, terminal, *args):
     """Adds a transition to the replay memory.
 
@@ -453,7 +460,7 @@ class OutOfGraphReplayBuffer(lock.LockedClass):
 
     return indices
 
-  @lock.locked_method
+  @lock_lib.locked_method()
   def sample_transition_batch(self, batch_size=None, indices=None):
     """Returns a batch of transitions (including any extra contents).
 
@@ -587,7 +594,7 @@ class OutOfGraphReplayBuffer(lock.LockedClass):
         checkpointable_elements[member_name] = member
     return checkpointable_elements
 
-  @lock.locked_method
+  @lock_lib.locked_method()
   def save(self, checkpoint_dir, iteration_number):
     """Save the OutOfGraphReplayBuffer attributes into a file.
 
@@ -632,7 +639,7 @@ class OutOfGraphReplayBuffer(lock.LockedClass):
         except tf.errors.NotFoundError:
           pass
 
-  @lock.locked_method
+  @lock_lib.locked_method()
   def load(self, checkpoint_dir, suffix):
     """Restores the object from bundle_dictionary and numpy checkpoints.
 

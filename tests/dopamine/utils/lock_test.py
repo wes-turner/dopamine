@@ -28,14 +28,14 @@ class _MockLock(object):
     """Locks the lock."""
     raise ValueError('Lock is locked.')
 
-  def __exit__(slef, *args, **kwargs):
+  def __exit__(self, *args, **kwargs):
     pass
 
 
 class _MockClass(object):
   """Mock class to test the lock againts."""
 
-  @lock.locked_method
+  @lock.locked_method()
   def mock_method(self):
     pass
 
@@ -51,11 +51,20 @@ class LockDecoratorTest(test.TestCase):
     with self.assertRaisesRegexp(ValueError, 'Lock is locked.'):
       mock_object.mock_method()
 
+  def test_locks_doesnt_apply(self):
+    """Tests None lock."""
+    mock_object = _MockClass()
+    mock_object._lock = None
+    mock_object.mock_method()
+
   def test_no_lock_attribute(self):
     mock_object = _MockClass()
     with self.assertRaisesRegexp(
         AttributeError, r'Object .* expected to have a `_lock` attribute.'):
       mock_object.mock_method()
+
+  def test_wrapper_function_name(self,):
+    self.assertEqual(_MockClass.mock_method.__name__, 'mock_method')
 
 
 if __name__ == '__main__':
