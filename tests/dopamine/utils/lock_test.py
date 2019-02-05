@@ -37,6 +37,7 @@ class _MockClass(object):
 
   @lock.locked_method()
   def mock_method(self):
+    """Dummy method to apply decorator to."""
     pass
 
 
@@ -47,14 +48,14 @@ class LockDecoratorTest(test.TestCase):
     """Tests that the lock properly applies to a given function."""
 
     mock_object = _MockClass()
-    mock_object._lock = _MockLock()
+    mock_object._lock = _MockLock()  # pylint: disable=attribute-defined-outside-init, protected-access
     with self.assertRaisesRegexp(ValueError, 'Lock is locked.'):
       mock_object.mock_method()
 
   def test_locks_doesnt_apply(self):
     """Tests None lock."""
     mock_object = _MockClass()
-    mock_object._lock = None
+    mock_object._lock = None  # pylint: disable=attribute-defined-outside-init, protected-access
     mock_object.mock_method()
 
   def test_no_lock_attribute(self):

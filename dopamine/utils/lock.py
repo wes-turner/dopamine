@@ -29,10 +29,26 @@ _DEFAULT_LOCK_ATTR_NAME = '_lock'
 
 def initialize_lock(object_to_lock, lock=threading.Lock(),
                     lock_attribute_name=_DEFAULT_LOCK_ATTR_NAME):
+  """Initializes a lock attribute for a specified object.
+
+  Args:
+    object_to_lock: object to which the lock applies.
+    lock: lock object to use for protection against concurrent access.
+    lock_attribute_name: str, name of the lock attribute to assign to
+      `object_to_lock`.
+
+  Raises:
+    AttributeError: If `object_to_lock` already has an attribute named
+      `lock_attribute_name`.
+  """
+  if hasattr(object_to_lock, lock_attribute_name):
+    raise AttributeError(
+        'Object already has a `{}` attribute.'.format(lock_attribute_name))
   setattr(object_to_lock, lock_attribute_name, lock)
 
 
 class locked_method(object):
+  """Decorator to apply lock to a method."""
 
   def __init__(self, lock_attribute_name=_DEFAULT_LOCK_ATTR_NAME):
     """Creates a `locked_method` object.
@@ -55,6 +71,9 @@ class locked_method(object):
 
     Returns:
       A function with same signature as the input function.
+
+    Raises:
+      AttributeError: If object doesn't have a lock attribute.
     """
     lock_attribute_name = self._lock_attribute_name
     @functools.wraps(fn)
