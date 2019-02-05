@@ -20,6 +20,7 @@ from __future__ import print_function
 import gzip
 import os
 import shutil
+import mock
 
 from absl import flags
 from dopamine.replay_memory import circular_replay_buffer
@@ -34,30 +35,6 @@ OBSERVATION_SHAPE = (84, 84)
 OBS_DTYPE = np.uint8
 STACK_SIZE = 4
 BATCH_SIZE = 32
-
-
-class _MockLock(object):
-  """Mock lock for testing purposes."""
-
-  def __init__(self):
-    self._blocked = False
-    self._exited = True
-    self._blocked = None
-
-  def __enter__(self, *args, **kwargs):
-    """Locks the lock."""
-    if self._blocked:
-      raise ValueError('Lock is locked.')
-    self._blocked = True
-    self._exited = False
-
-  def __exit__(self, *args, **kwargs):
-    """Purposely leaves the lock locked to be `manually` unlocked."""
-    self._exited = True
-
-  def exited_properly(self):
-    """Checks that ' `__exit__` is properly called when the lock is released."""
-    return self._exited
 
 
 class CheckpointableClass(object):
@@ -667,28 +644,32 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
         stack_size=1,
         replay_capacity=10,
         batch_size=2)
-    memory._lock = _MockLock()
     return memory
 
   def test_memory_locks_itself(self):
     """Tests that adding an element to the buffer blocks the lock."""
     memory = self._create_locked_memory()
-    add_op = lambda: memory.add((1, 2), 0, 0, False)
+    memory._lock = mock.Mock()
+    memory._lock.__enter__ = mock.Mock()
+    memory._lock.__exit__ = mock.Mock()
 
     # Check that buffer is empty at first.
     self.assertEqual(memory.add_count, 0)
     # Add one element.
-    add_op()
+    memory.add((1, 2), 0, 0, False)
     # Check that buffer contains one element.
     self.assertEqual(memory.add_count, 1)
-    # Check that the lock went throughh the proper unlock process.
-    self.assertTrue(memory._lock.exited_properly())  # pylint: disable=protected-access
-    # Check that the lock is still active.
-    self.assertTrue(memory._lock._blocked)
+    # Check that the lock went throughh the proper lock/unlock process.
+    memory._lock.__enter__.assert_called_once()
+    memory._lock.__exit__.assert_called_once()
 
   def test_memory_is_locked(self):
     """Tests that when the lock is blocked elements cannot be added."""
     memory = self._create_locked_memory()
+    memory._lock = mock.Mock()
+    memory._lock.__enter__ = mock.Mock(
+        side_effect=ValueError('Lock is locked.'))
+    memory._lock.__exit__ = mock.Mock()
     memory._lock._blocked = True
     with self.assertRaisesRegexp(ValueError, 'Lock is locked.'):
       memory.add((1, 2), 0, 0, False)
@@ -696,11 +677,8 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     self.assertEqual(memory.add_count, 0)
 
   def test_memory_has_a_proper_lock(self):
-    memory = circular_replay_buffer.OutOfGraphReplayBuffer(
-        observation_shape=(2,),
-        stack_size=1,
-        replay_capacity=10,
-        batch_size=2)
+    """Tests that lock attribute is initialized properly."""
+    memory = self._create_locked_memory()
     self.assertTrue(hasattr(memory, '_lock'))
 
 
@@ -890,16 +868,15 @@ class WrappedReplayBufferTest(tf.test.TestCase):
         stack_size=1,
         replay_capacity=10,
         batch_size=2)
-    replay.memory._lock = _MockLock()
-    add_op = lambda: replay.add((1, 2), 0, 0, False)
-
+    lock = mock.Mock()
+    replay.memory._lock = lock
+    lock.__enter__ = mock.Mock()
+    lock.__exit__ = mock.Mock()
     # Add one element.
-    add_op()
-    # Check that the lock went throughh the proper unlock process.
-    self.assertTrue(replay.memory._lock.exited_properly())  # pylint: disable=protected-access
-    # Check that the lock is still active.
-    with self.assertRaisesRegexp(ValueError, 'Lock is locked.'):
-      add_op()
+    replay.add((1, 2), 0, 0, False)
+    # Check that the lock went through the proper lock/unlock process.
+    lock.__enter__.assert_called_once()
+    lock.__exit__.assert_called_once()
 
 
 if __name__ == '__main__':
