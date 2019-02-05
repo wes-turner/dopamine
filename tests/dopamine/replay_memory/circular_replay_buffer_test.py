@@ -21,8 +21,6 @@ import gzip
 import os
 import shutil
 
-
-
 from absl import flags
 from dopamine.replay_memory import circular_replay_buffer
 import numpy as np
@@ -696,6 +694,14 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
       memory.add((1, 2), 0, 0, False)
     # Check that the second element was not added.
     self.assertEqual(memory.add_count, 0)
+
+  def test_memory_has_a_proper_lock(self):
+    memory = circular_replay_buffer.OutOfGraphReplayBuffer(
+        observation_shape=(2,),
+        stack_size=1,
+        replay_capacity=10,
+        batch_size=2)
+    self.assertTrue(hasattr(memory, '_lock'))
 
 
 class WrappedReplayBufferTest(tf.test.TestCase):

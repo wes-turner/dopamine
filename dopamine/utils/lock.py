@@ -83,7 +83,7 @@ class locked_method(object):
             'Object {} expected to have a `{}` attribute.'.format(
                 self, lock_attribute_name))
       lock = getattr(self, lock_attribute_name, None)
-      if not lock:
+      if lock is None:
         return fn(self, *args, **kwargs)
       with lock:
         return fn(self, *args, **kwargs)
