@@ -668,11 +668,11 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     memory._lock.__enter__ = mock.Mock(
         side_effect=ValueError('Lock is locked.'))
     memory._lock.__exit__ = mock.Mock()
-    memory._lock._blocked = True
+    memory._add = mock.Mock()
     with self.assertRaisesRegexp(ValueError, 'Lock is locked.'):
       memory.add((1, 2), 0, 0, False)
     # Check that the second element was not added.
-    self.assertEqual(memory.add_count, 0)
+    self.assertEqual(memory._add.called, 0)
 
   def test_memory_has_a_proper_lock(self):
     """Tests that lock attribute is initialized properly."""
