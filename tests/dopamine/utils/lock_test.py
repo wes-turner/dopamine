@@ -44,7 +44,7 @@ class _MockClass(object):
 class LockDecoratorTest(test.TestCase):
   """Runs tests for lock_decorator function."""
 
-  def test_locks_applies(self):
+  def testLocksApplies(self):
     """Tests that the lock properly applies to a given function."""
 
     mock_object = _MockClass()
@@ -52,19 +52,19 @@ class LockDecoratorTest(test.TestCase):
     with self.assertRaisesRegexp(ValueError, 'Lock is locked.'):
       mock_object.mock_method()
 
-  def test_locks_doesnt_apply(self):
+  def testLocksDoesntApply(self):
     """Tests None lock."""
     mock_object = _MockClass()
     mock_object._lock = None  # pylint: disable=attribute-defined-outside-init, protected-access
     mock_object.mock_method()
 
-  def test_no_lock_attribute(self):
+  def testNoLockAttribute(self):
     mock_object = _MockClass()
     with self.assertRaisesRegexp(
         AttributeError, r'Object .* expected to have a `_lock` attribute.'):
       mock_object.mock_method()
 
-  def test_wrapper_function_name(self,):
+  def testWrapperFunctionName(self,):
     self.assertEqual(_MockClass.mock_method.__name__, 'mock_method')
 
 

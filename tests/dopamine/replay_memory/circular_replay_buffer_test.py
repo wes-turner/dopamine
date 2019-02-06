@@ -645,7 +645,7 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     self.assertEqual(memory.add_count, self._test_add_count)
     self.assertAllClose(memory.invalid_range, self._test_invalid_range)
 
-  def test_memory_locks_itself(self):
+  def testMemoryLocksItself(self):
     """Tests that adding an element to the buffer blocks the lock."""
     memory = _create_dummy_memory()
     memory._lock = mock.Mock()
@@ -661,7 +661,7 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     memory._lock.__enter__.assert_called_once()
     memory._lock.__exit__.assert_called_once()
 
-  def test_memory_is_locked(self):
+  def testMemoryIsLocked(self):
     """Tests that when the lock is blocked elements cannot be added."""
     memory = _create_dummy_memory()
     memory._lock = mock.Mock()
@@ -674,7 +674,7 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     # Check that the second element was not added.
     self.assertEqual(memory._add.called, 0)
 
-  def test_memory_has_a_proper_lock(self):
+  def testMemoryHasAProperLock(self):
     """Tests that lock attribute is initialized properly."""
     memory = _create_dummy_memory()
     self.assertTrue(hasattr(memory, '_lock'))
@@ -859,7 +859,7 @@ class WrappedReplayBufferTest(tf.test.TestCase):
         stack_size=STACK_SIZE, replay_capacity=10, observation_dtype=np.int32)
     self.assertEqual(replay.memory._store['observation'].dtype, np.int32)
 
-  def test_replay_buffer_is_locked(self):
+  def testReplayBufferIsLocked(self):
     """Tests that the lock/unlock of the buffer's methods works properly."""
     replay = circular_replay_buffer.WrappedReplayBuffer(
         observation_shape=(2,),
