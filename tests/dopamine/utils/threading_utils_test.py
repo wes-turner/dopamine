@@ -32,15 +32,6 @@ def _get_internal_name(attr):
   return '__' + attr + '_' + thread_id
 
 
-def _create_mock_object(**kwargs):
-  @threading_utils.local_attributes(kwargs.keys())
-  class _MockClass(object):
-
-    def __init__(self):
-      threading_utils.initialize_local_attributes(self, **kwargs)
-  return _MockClass()
-
-
 class ThreadsTest(test.TestCase):
   """Unit tests for threading utils."""
 
