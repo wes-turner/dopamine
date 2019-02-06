@@ -65,7 +65,9 @@ def locked_method(lock_attribute_name=_DEFAULT_LOCK_ATTR_NAME):
           * self: Instance of the class.
           * *args: Additional positional arguments.
           * **kwargs: Additional keyword arguments.
-        Note that the instance must have a `_lock` attribute.
+        Note that the instance must have an attribute which name is the same
+        as `lock_attribute_name`. If the value of this attribute is `None`, no
+        locking is applied and the decorated function is executed.
 
     Returns:
       A function with same signature as the input function.
