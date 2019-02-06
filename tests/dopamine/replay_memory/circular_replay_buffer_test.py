@@ -43,6 +43,14 @@ class CheckpointableClass(object):
     self.attribute = 0
 
 
+def _create_dummy_memory():
+  return circular_replay_buffer.OutOfGraphReplayBuffer(
+      observation_shape=(2,),
+      stack_size=1,
+      replay_capacity=10,
+      batch_size=2)
+
+
 class OutOfGraphReplayBufferTest(tf.test.TestCase):
 
   def setUp(self):
@@ -637,35 +645,25 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     self.assertEqual(memory.add_count, self._test_add_count)
     self.assertAllClose(memory.invalid_range, self._test_invalid_range)
 
-  @staticmethod
-  def _create_locked_memory():
-    memory = circular_replay_buffer.OutOfGraphReplayBuffer(
-        observation_shape=(2,),
-        stack_size=1,
-        replay_capacity=10,
-        batch_size=2)
-    return memory
-
   def test_memory_locks_itself(self):
     """Tests that adding an element to the buffer blocks the lock."""
-    memory = self._create_locked_memory()
+    memory = _create_dummy_memory()
     memory._lock = mock.Mock()
     memory._lock.__enter__ = mock.Mock()
     memory._lock.__exit__ = mock.Mock()
+    memory._add = mock.Mock()
 
-    # Check that buffer is empty at first.
-    self.assertEqual(memory.add_count, 0)
     # Add one element.
     memory.add((1, 2), 0, 0, False)
     # Check that buffer contains one element.
-    self.assertEqual(memory.add_count, 1)
+    memory._add.assert_called_once()
     # Check that the lock went throughh the proper lock/unlock process.
     memory._lock.__enter__.assert_called_once()
     memory._lock.__exit__.assert_called_once()
 
   def test_memory_is_locked(self):
     """Tests that when the lock is blocked elements cannot be added."""
-    memory = self._create_locked_memory()
+    memory = _create_dummy_memory()
     memory._lock = mock.Mock()
     memory._lock.__enter__ = mock.Mock(
         side_effect=ValueError('Lock is locked.'))
@@ -678,7 +676,7 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
 
   def test_memory_has_a_proper_lock(self):
     """Tests that lock attribute is initialized properly."""
-    memory = self._create_locked_memory()
+    memory = _create_dummy_memory()
     self.assertTrue(hasattr(memory, '_lock'))
 
 
