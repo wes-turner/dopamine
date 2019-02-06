@@ -99,6 +99,8 @@ class ThreadsTest(test.TestCase):
     obj.attr2 = 20
     setattr(obj, _get_internal_name('attr1'), 1)
     setattr(obj, _get_internal_name('attr2'), 2)
+    self.assertEqual(obj.attr1, 1)
+    self.assertEqual(obj.attr2, 2)
 
   def test_callable_attribute(self):
     """Tests that internal value is properly called with callable attribute."""
