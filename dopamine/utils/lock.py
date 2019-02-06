@@ -47,18 +47,16 @@ def initialize_lock(object_to_lock, lock=threading.Lock(),
   setattr(object_to_lock, lock_attribute_name, lock)
 
 
-class locked_method(object):
-  """Decorator to apply lock to a method."""
+def locked_method(lock_attribute_name=_DEFAULT_LOCK_ATTR_NAME):
+  """Creates decorator to apply lock to class methods.
 
-  def __init__(self, lock_attribute_name=_DEFAULT_LOCK_ATTR_NAME):
-    """Creates a `locked_method` object.
+  Args:
+    lock_attribute_name: str, name of the instance attribute to use as a lock.
 
-    Args:
-      lock_attribute_name: str, name of the instance attribute to use as a lock.
-    """
-    self._lock_attribute_name = lock_attribute_name
-
-  def __call__(self, fn):
+  Returns:
+    A decorator function.
+  """
+  def _decorator(fn):
     """Wraps a class's method so it's locked.
 
     Args:
@@ -75,7 +73,6 @@ class locked_method(object):
     Raises:
       AttributeError: If object doesn't have a lock attribute.
     """
-    lock_attribute_name = self._lock_attribute_name
     @functools.wraps(fn)
     def _decorated(self, *args, **kwargs):
       if not hasattr(self, lock_attribute_name):
@@ -88,3 +85,4 @@ class locked_method(object):
       with lock:
         return fn(self, *args, **kwargs)
     return _decorated
+  return _decorator
