@@ -648,15 +648,12 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
   def testMemoryLocksItself(self):
     """Tests that adding an element to the buffer blocks the lock."""
     memory = _create_dummy_memory()
-    memory._lock = mock.Mock()
-    memory._lock.__enter__ = mock.Mock()
-    memory._lock.__exit__ = mock.Mock()
-    memory._add = mock.Mock()
+    memory._lock = mock.MagicMock()
 
     # Add one element.
     memory.add((1, 2), 0, 0, False)
     # Check that buffer contains one element.
-    memory._add.assert_called_once()
+    self.assertEqual(memory.add_count, 1)
     # Check that the lock went throughh the proper lock/unlock process.
     memory._lock.__enter__.assert_called_once()
     memory._lock.__exit__.assert_called_once()
@@ -664,10 +661,9 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
   def testAddMethodIsBlockedWhenLockIsHeld(self):
     """Tests that when the lock is blocked elements cannot be added."""
     memory = _create_dummy_memory()
-    memory._lock = mock.Mock()
+    memory._lock = mock.MagicMock()
     memory._lock.__enter__ = mock.Mock(
         side_effect=ValueError('Lock is locked.'))
-    memory._lock.__exit__ = mock.Mock()
     with self.assertRaisesRegexp(ValueError, 'Lock is locked.'):
       memory.add((1, 2), 0, 0, False)
     # Check that the second element was not added.
@@ -865,10 +861,8 @@ class WrappedReplayBufferTest(tf.test.TestCase):
         stack_size=1,
         replay_capacity=10,
         batch_size=2)
-    lock = mock.Mock()
+    lock = mock.MagicMock()
     replay.memory._lock = lock
-    lock.__enter__ = mock.Mock()
-    lock.__exit__ = mock.Mock()
     # Add one element.
     replay.add((1, 2), 0, 0, False)
     # Check that the lock went through the proper lock/unlock process.
