@@ -855,7 +855,7 @@ class WrappedReplayBufferTest(tf.test.TestCase):
     self.assertEqual(replay.memory._store['observation'].dtype, np.int32)
 
   def testReplayBufferIsLocked(self):
-    """Tests that the lock/unlock of the buffer's methods works properly."""
+    """Tests that the is properly checked."""
     replay = circular_replay_buffer.WrappedReplayBuffer(
         observation_shape=(2,),
         stack_size=1,
