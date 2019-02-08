@@ -35,20 +35,20 @@ def _get_internal_name(attr):
 class ThreadsTest(test.TestCase):
   """Unit tests for threading utils."""
 
-  def test_default_value_is_added(self):
+  def testDefaultValueIsAdded(self):
     """Tests that the default value is properly set by the helper."""
     obj = mock.Mock()
     threading_utils.initialize_local_attributes(obj, attr=3)
     self.assertEqual(obj.attr_default, 3)
 
-  def test_multiple_default_values_are_set(self):
+  def testMultipleDefaultValuesAreSet(self):
     """Tests that multiple default values are properly set by the helper."""
     obj = mock.Mock()
     threading_utils.initialize_local_attributes(obj, attr1=3, attr2=4)
     self.assertEqual(obj.attr1_default, 3)
     self.assertEqual(obj.attr2_default, 4)
 
-  def test_attribute_default_value_is_called(self):
+  def testAttributeDefaultValueIsCalled(self):
     """Tests that getter properly uses the default value."""
     MockClass = threading_utils.local_attributes(['attr'])(
         type('MockClass', (object,), {}))
@@ -56,7 +56,7 @@ class ThreadsTest(test.TestCase):
     obj.attr_default = 'default-value'
     self.assertEqual(obj.attr, 'default-value')
 
-  def test_default_value_is_read(self):
+  def testDefaultValueIsRead(self):
     """Tests that getter properly initializes the local value."""
     MockClass = threading_utils.local_attributes(['attr'])(
         type('MockClass', (object,), {}))
@@ -65,7 +65,7 @@ class ThreadsTest(test.TestCase):
     obj.attr  # pylint: disable=pointless-statement
     self.assertEqual(getattr(obj, _get_internal_name('attr')), 'default-value')
 
-  def test_internal_attribute_is_read(self):
+  def testInternalAttributeIsRead(self):
     """Tests that getter properly uses the internal value."""
     MockClass = threading_utils.local_attributes(['attr'])(
         type('MockClass', (object,), {}))
@@ -73,7 +73,7 @@ class ThreadsTest(test.TestCase):
     setattr(obj, _get_internal_name('attr'), 'intenal-value')
     self.assertEqual(obj.attr, 'intenal-value')
 
-  def test_internal_attribute_is_set(self):
+  def testInternalAttributeIsSet(self):
     """Tests that setter properly sets the internal value."""
     MockClass = threading_utils.local_attributes(['attr'])(
         type('MockClass', (object,), {}))
@@ -81,7 +81,7 @@ class ThreadsTest(test.TestCase):
     obj.attr = 'internal-value'
     self.assertEqual(getattr(obj, _get_internal_name('attr')), 'internal-value')
 
-  def test_internal_value_over_default(self):
+  def testInternalValueOverDefault(self):
     """Tests that getter uese internal value over default one."""
     MockClass = threading_utils.local_attributes(['attr'])(
         type('MockClass', (object,), {}))
@@ -90,7 +90,7 @@ class ThreadsTest(test.TestCase):
     setattr(obj, _get_internal_name('attr'), 'internal-value')
     self.assertEqual(obj.attr, 'internal-value')
 
-  def test_multiple_attributes(self):
+  def testMultipleAttributes(self):
     """Tests the class decorator with multiple local attributes."""
     MockClass = threading_utils.local_attributes(['attr1', 'attr2'])(
         type('MockClass', (object,), {}))
@@ -102,7 +102,7 @@ class ThreadsTest(test.TestCase):
     self.assertEqual(obj.attr1, 1)
     self.assertEqual(obj.attr2, 2)
 
-  def test_callable_attribute(self):
+  def testCallableAttribute(self):
     """Tests that internal value is properly called with callable attribute."""
     MockClass = threading_utils.local_attributes(['attr'])(
         type('MockClass', (object,), {}))
@@ -116,7 +116,7 @@ class ThreadsTest(test.TestCase):
 class DQNIntegrationTest(test.TestCase):
   """Integration test for DQNAgent and threading utils."""
 
-  def test_bundling(self):
+  def testBundling(self):
     """Tests that local values are poperly updated when reading a checkpoint."""
     with tf.Session() as sess:
       agent = agent = dqn_agent.DQNAgent(sess, 3, observation_shape=(2, 2))
