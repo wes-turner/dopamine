@@ -62,6 +62,8 @@ class ThreadsTest(test.TestCase):
         type('MockClass', (object,), {}))
     obj = MockClass()
     obj.attr_default = 'default-value'
+    # Calling the attribute is expected to initialize it with the default value.
+    # Hence the pointless statement to run the getter.
     obj.attr  # pylint: disable=pointless-statement
     self.assertEqual(getattr(obj, _get_internal_name('attr')), 'default-value')
 
