@@ -94,7 +94,7 @@ def initialize_local_attributes(obj, **kwargs):
     ```
   Args:
     obj: The object that has the local attributes.
-    **kwargs: The default value for each local attributes.
+    **kwargs: The default value for each local attribute.
   """
   for key, val in kwargs.items():
     setattr(obj, _get_default_value_name(key), val)
