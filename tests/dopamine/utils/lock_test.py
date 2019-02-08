@@ -32,8 +32,8 @@ class _MockLock(object):
     pass
 
 
-class _MockClass(object):
-  """Mock class to test the lock againts."""
+class _DummyClass(object):
+  """Dummy class to test the lock decorator against."""
 
   @lock.locked_method()
   def mock_method(self):
@@ -47,25 +47,26 @@ class LockDecoratorTest(test.TestCase):
   def testLocksApplies(self):
     """Tests that the lock properly applies to a given function."""
 
-    mock_object = _MockClass()
-    mock_object._lock = _MockLock()  # pylint: disable=attribute-defined-outside-init, protected-access
+    mock_object = _DummyClass()
+    lock.initialize_lock(mock_object, _MockLock())
     with self.assertRaisesRegexp(ValueError, 'Lock is locked.'):
       mock_object.mock_method()
 
-  def testLocksDoesntApply(self):
-    """Tests None lock."""
-    mock_object = _MockClass()
-    mock_object._lock = None  # pylint: disable=attribute-defined-outside-init, protected-access
+  def testDoesntEnforceLockWhenNone(self):
+    """Tests that no lock is enforced when lock is None."""
+    mock_object = _DummyClass()
+    lock.initialize_lock(mock_object, lock=None)
     mock_object.mock_method()
 
   def testNoLockAttribute(self):
-    mock_object = _MockClass()
+    """Tests the behavior when the lock is not initialized."""
+    mock_object = _DummyClass()
     with self.assertRaisesRegexp(
         AttributeError, r'Object .* expected to have a `_lock` attribute.'):
       mock_object.mock_method()
 
   def testWrapperFunctionName(self,):
-    self.assertEqual(_MockClass.mock_method.__name__, 'mock_method')
+    self.assertEqual(_DummyClass.mock_method.__name__, 'mock_method')
 
 
 if __name__ == '__main__':
