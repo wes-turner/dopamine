@@ -112,6 +112,28 @@ class ThreadsTest(test.TestCase):
     obj.attr.callable_method()
     internal_attr.callable_method.assert_called_once()
 
+  def testMultiThreads(self):
+    """Tests that different threads create different local attributes."""
+    MockClass = threading_utils.local_attributes(['attr'])(
+        type('MockClass', (object,), {}))
+    obj = MockClass()
+    internal_name_method = 'dopamine.utils.threading_utils._get_internal_name'
+    # Initializes attribute in thread 1.
+    with mock.patch(internal_name_method, return_value='thread_1'):
+      obj.attr = 1
+    # Initializes attribute in thread 2.
+    with mock.patch(internal_name_method, return_value='thread_2'):
+      obj.attr = 2
+    # Reads attribute in thread 1.
+    with mock.patch(internal_name_method, return_value='thread_1'):
+      self.assertEqual(obj.attr, 1)
+    # Reads attribute in thread 2.
+    with mock.patch(internal_name_method, return_value='thread_2'):
+      self.assertEqual(obj.attr, 2)
+    # Checks internal variables.
+    self.assertEqual(getattr(obj, 'thread_1'), 1)
+    self.assertEqual(getattr(obj, 'thread_2'), 2)
+
 
 class DQNIntegrationTest(test.TestCase):
   """Integration test for DQNAgent and threading utils."""
