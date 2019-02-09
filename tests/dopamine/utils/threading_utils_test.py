@@ -31,34 +31,43 @@ def _get_internal_name(attr):
   return '__' + attr + '_' + thread_id
 
 
+_DummyClass = type('DummyClass', (object,), {})
+
+
 class ThreadsTest(test.TestCase):
   """Unit tests for threading utils."""
 
+  def testDefaultValueAlreadyExists(self):
+    """Tests that an error is raised when overriding existing default value."""
+    obj = _DummyClass()
+    obj._attr_default = 'existing-default-value'
+    with self.assertRaisesRegexp(
+        AttributeError, 'Object `.*` already has .* attribute.'):
+      threading_utils.initialize_local_attributes(obj, attr='new-default-value')
+
   def testDefaultValueIsAdded(self):
     """Tests that the default value is properly set by the helper."""
-    obj = test.mock.Mock()
+    obj = _DummyClass()
     threading_utils.initialize_local_attributes(obj, attr=3)
     self.assertEqual(obj._attr_default, 3)
 
   def testMultipleDefaultValuesAreSet(self):
     """Tests that multiple default values are properly set by the helper."""
-    obj = test.mock.Mock()
+    obj = _DummyClass()
     threading_utils.initialize_local_attributes(obj, attr1=3, attr2=4)
     self.assertEqual(obj._attr1_default, 3)
     self.assertEqual(obj._attr2_default, 4)
 
   def testAttributeDefaultValueIsCalled(self):
     """Tests that getter properly uses the default value."""
-    MockClass = threading_utils.local_attributes(['attr'])(
-        type('MockClass', (object,), {}))
+    MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
     obj._attr_default = 'default-value'
     self.assertEqual(obj.attr, 'default-value')
 
   def testDefaultValueIsRead(self):
     """Tests that getter properly initializes the local value."""
-    MockClass = threading_utils.local_attributes(['attr'])(
-        type('MockClass', (object,), {}))
+    MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
     obj._attr_default = 'default-value'
     # Calling the attribute is expected to initialize it with the default value.
@@ -69,23 +78,21 @@ class ThreadsTest(test.TestCase):
   def testInternalAttributeIsRead(self):
     """Tests that getter properly uses the internal value."""
     MockClass = threading_utils.local_attributes(['attr'])(
-        type('MockClass', (object,), {}))
+        _DummyClass)
     obj = MockClass()
     setattr(obj, _get_internal_name('attr'), 'intenal-value')
     self.assertEqual(obj.attr, 'intenal-value')
 
   def testInternalAttributeIsSet(self):
     """Tests that setter properly sets the internal value."""
-    MockClass = threading_utils.local_attributes(['attr'])(
-        type('MockClass', (object,), {}))
+    MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
     obj.attr = 'internal-value'
     self.assertEqual(getattr(obj, _get_internal_name('attr')), 'internal-value')
 
   def testInternalValueOverDefault(self):
     """Tests that getter uese internal value over default one."""
-    MockClass = threading_utils.local_attributes(['attr'])(
-        type('MockClass', (object,), {}))
+    MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
     obj._attr_default = 'default-value'
     setattr(obj, _get_internal_name('attr'), 'internal-value')
@@ -93,8 +100,8 @@ class ThreadsTest(test.TestCase):
 
   def testMultipleAttributes(self):
     """Tests the class decorator with multiple local attributes."""
-    MockClass = threading_utils.local_attributes(['attr1', 'attr2'])(
-        type('MockClass', (object,), {}))
+    MockClass = threading_utils.local_attributes(
+        ['attr1', 'attr2'])(_DummyClass)
     obj = MockClass()
     obj.attr1 = 10
     obj.attr2 = 20
@@ -105,8 +112,7 @@ class ThreadsTest(test.TestCase):
 
   def testCallableAttribute(self):
     """Tests that internal value is properly called with callable attribute."""
-    MockClass = threading_utils.local_attributes(['attr'])(
-        type('MockClass', (object,), {}))
+    MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
     internal_attr = test.mock.Mock()
     setattr(obj, _get_internal_name('attr'), internal_attr)
@@ -115,8 +121,7 @@ class ThreadsTest(test.TestCase):
 
   def testMultiThreads(self):
     """Tests that different threads create different local attributes."""
-    MockClass = threading_utils.local_attributes(['attr'])(
-        type('MockClass', (object,), {}))
+    MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
     internal_name_method = 'dopamine.utils.threading_utils._get_internal_name'
     # Initializes attribute in thread 1.

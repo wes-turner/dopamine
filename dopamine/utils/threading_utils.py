@@ -134,6 +134,12 @@ def initialize_local_attributes(obj, **kwargs):
   Args:
     obj: The object that has the local attributes.
     **kwargs: The default value for each local attribute.
+  Raises:
+    AttributeError: If the default value attribute already exists.
   """
   for key, val in kwargs.items():
-    setattr(obj, _get_default_value_name(key), val)
+    default_attr = _get_default_value_name(key)
+    if hasattr(obj, default_attr):
+      raise AttributeError(
+          'Object `{}` already has a `{}` attribute.'.format(obj, default_attr))
+    setattr(obj, default_attr, val)
