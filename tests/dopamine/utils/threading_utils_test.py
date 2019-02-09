@@ -50,6 +50,17 @@ class ThreadingUtilsAPITest(test.TestCase):
       # value. Hence the pointless statement to run the getter.
       _ = obj.attr
 
+  def testDefaultAttributeIsNotCallable(self):
+    """Tests the error raised when provided default attribute not callable."""
+    MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
+    obj = MockClass()
+    threading_utils.initialize_local_attributes(obj, attr='default-value')
+    with self.assertRaisesRegexp(
+        AttributeError, 'Default value initializer must be callable.'):
+      # Calling the attribute is expected to initialize it with the default
+      # value. Hence the pointless statement to run the getter.
+      _ = obj.attr
+
   def testDefaultValueIsUsed(self):
     """Tests that the default value is properly set by the helper."""
     obj = _DummyClass()
