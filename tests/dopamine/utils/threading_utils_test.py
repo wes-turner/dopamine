@@ -17,7 +17,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import mock
 import tempfile
 import threading
 
@@ -37,13 +36,13 @@ class ThreadsTest(test.TestCase):
 
   def testDefaultValueIsAdded(self):
     """Tests that the default value is properly set by the helper."""
-    obj = mock.Mock()
+    obj = test.mock.Mock()
     threading_utils.initialize_local_attributes(obj, attr=3)
     self.assertEqual(obj.attr_default, 3)
 
   def testMultipleDefaultValuesAreSet(self):
     """Tests that multiple default values are properly set by the helper."""
-    obj = mock.Mock()
+    obj = test.mock.Mock()
     threading_utils.initialize_local_attributes(obj, attr1=3, attr2=4)
     self.assertEqual(obj.attr1_default, 3)
     self.assertEqual(obj.attr2_default, 4)
@@ -109,7 +108,7 @@ class ThreadsTest(test.TestCase):
     MockClass = threading_utils.local_attributes(['attr'])(
         type('MockClass', (object,), {}))
     obj = MockClass()
-    internal_attr = mock.Mock()
+    internal_attr = test.mock.Mock()
     setattr(obj, _get_internal_name('attr'), internal_attr)
     obj.attr.callable_method()
     internal_attr.callable_method.assert_called_once()
@@ -121,16 +120,16 @@ class ThreadsTest(test.TestCase):
     obj = MockClass()
     internal_name_method = 'dopamine.utils.threading_utils._get_internal_name'
     # Initializes attribute in thread 1.
-    with mock.patch(internal_name_method, return_value='thread_1'):
+    with test.mock.patch(internal_name_method, return_value='thread_1'):
       obj.attr = 1
     # Initializes attribute in thread 2.
-    with mock.patch(internal_name_method, return_value='thread_2'):
+    with test.mock.patch(internal_name_method, return_value='thread_2'):
       obj.attr = 2
     # Reads attribute in thread 1.
-    with mock.patch(internal_name_method, return_value='thread_1'):
+    with test.mock.patch(internal_name_method, return_value='thread_1'):
       self.assertEqual(obj.attr, 1)
     # Reads attribute in thread 2.
-    with mock.patch(internal_name_method, return_value='thread_2'):
+    with test.mock.patch(internal_name_method, return_value='thread_2'):
       self.assertEqual(obj.attr, 2)
     # Checks internal variables.
     self.assertEqual(getattr(obj, 'thread_1'), 1)
