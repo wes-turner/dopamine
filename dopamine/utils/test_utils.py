@@ -41,7 +41,6 @@ def mock_thread(thread_id):
     ```python
     import threading
 
-
     with mock_thread('my-thread-id'):
       assert threading.current_thread().ident == 'my-thread-id'
     ```
