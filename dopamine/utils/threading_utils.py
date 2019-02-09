@@ -12,8 +12,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Decorator to decouple object attributes and make them local to threads."""
+"""Module to decouple object attributes and make them local to threads.
 
+The `local_attributes` class decorator defines a custom getter, setter and
+deleter for each specified attribute. These getter, setter and deleter actually
+wrap internal attributes that are thread specific.
+
+Each attribute has a default value that initializes the local value the first
+time they are called in a thread. To set these default values, use the
+`initialize_local_attributes` helper of this module.
+
+Example of usage:
+  ```python
+  @local_attributes(['attr'])
+  class MyClass(object):
+
+    def __init__(self, attr_default_value):
+      initialize_local_attributes(self, attr=attr_default_value)
+  ```
+"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -84,14 +101,6 @@ def initialize_local_attributes(obj, **kwargs):
   In each thread, the first time the getter is called it is initialized to the
   global default value. This helper function is to set these default value.
 
-  Example of usage:
-    ```python
-    @local_attributes(['attr'])
-    class MyClass(object):
-
-      def __init__(self, attr_default_value):
-        initialize_local_attributes(self, attr=attr_default_value)
-    ```
   Args:
     obj: The object that has the local attributes.
     **kwargs: The default value for each local attribute.
