@@ -45,6 +45,16 @@ class ThreadsTest(test.TestCase):
         AttributeError, 'Object `.*` already has .* attribute.'):
       threading_utils.initialize_local_attributes(obj, attr='new-default-value')
 
+  def testAttributeNotInitialized(self):
+    """Tests that error is raised when local value has not been initialized."""
+    MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
+    obj = MockClass()
+    with self.assertRaisesRegexp(
+        AttributeError, 'Local value for attribute `attr` has not been set.*'):
+      # Calling the attribute is expected to initialize it with the default
+      # value. Hence the pointless statement to run the getter.
+      obj.attr  # pylint: disable=pointless-statement
+
   def testDefaultValueIsAdded(self):
     """Tests that the default value is properly set by the helper."""
     obj = _DummyClass()

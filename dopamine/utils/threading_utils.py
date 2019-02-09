@@ -99,6 +99,12 @@ def _add_property(cls, attr_name):
 
   def _get(self):
     if not hasattr(self, _get_internal_name(attr_name)):
+      if not hasattr(self, _get_default_value_name(attr_name)):
+        raise AttributeError(
+            'Local value for attribute `{}` has not been set. You can '
+            'initialize it locally (`self.{} = <initial-value>`) or set a '
+            'global value using the `initialize_local_attributes` '
+            'helper.'.format(attr_name, attr_name))
       _set(self, getattr(self, _get_default_value_name(attr_name)))
     return getattr(self, _get_internal_name(attr_name))
 
