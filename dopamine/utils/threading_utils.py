@@ -30,6 +30,15 @@ Example of usage:
     def __init__(self, attr_default_value):
       initialize_local_attributes(self, attr=attr_default_value)
   ```
+
+More precisely, for each attribute specified by the user, we create internal
+attributes that have a name specific to each thread. The custom getter, setter,
+and deleter access these internal attributes by providing the name of the
+current thread.
+To each specified attribute can also be associated a global default value that
+is stored in another internal attribute and that specifies which is the
+initial local value of the attribute in a new thread. This default value can be
+set at the object initialization.
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -39,13 +48,34 @@ import threading
 
 
 def _get_internal_name(name):
-  """Returns the thread local name of an attribute."""
+  """Returns the internal thread local name of an attribute.
+
+  For each specified attribute, we create a attribute which's name depends on the
+  current thread to store thread local value for that attribute. This methods
+  provides the name of this thread specific attribute.
+
+  Args:
+    name: str, name of the exposed attribute.
+  Returns:
+    str, name of the internal attribute storing thread local value.
+  """
   return '__' + name + '_' + str(threading.current_thread().ident)
 
 
 def _get_default_value_name(name):
-  """Returns the global default value of an attribute."""
-  return name + '_default'
+  """Returns the global default value of an attribute.
+
+  For each specified attribute, we create a global default value that is
+  object-specific and not thread-specific. This gloal deafault value is stored
+  in an internal attribute that is named `_attr_default` where `attr` is the
+  name of the specified attribute.
+
+  Args:
+    name: str, name of the exposed attribute.
+  Returns:
+    str, name of the internal attribute storing thread local value.
+  """
+  return '_' + name + '_default'
 
 
 def _add_property(cls, attr_name):
@@ -74,6 +104,7 @@ def _add_property(cls, attr_name):
 
   def _del(self):
     delattr(self, _get_internal_name(attr_name))
+
   setattr(cls, attr_name, property(_get, _set, _del))
 
 
@@ -82,7 +113,6 @@ def local_attributes(attributes):
 
   Args:
     attributes: List[str], names of the wrapped attributes to add to the class.
-
   Returns:
     A class decorator.
   """

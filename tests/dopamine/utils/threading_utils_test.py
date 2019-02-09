@@ -38,21 +38,21 @@ class ThreadsTest(test.TestCase):
     """Tests that the default value is properly set by the helper."""
     obj = test.mock.Mock()
     threading_utils.initialize_local_attributes(obj, attr=3)
-    self.assertEqual(obj.attr_default, 3)
+    self.assertEqual(obj._attr_default, 3)
 
   def testMultipleDefaultValuesAreSet(self):
     """Tests that multiple default values are properly set by the helper."""
     obj = test.mock.Mock()
     threading_utils.initialize_local_attributes(obj, attr1=3, attr2=4)
-    self.assertEqual(obj.attr1_default, 3)
-    self.assertEqual(obj.attr2_default, 4)
+    self.assertEqual(obj._attr1_default, 3)
+    self.assertEqual(obj._attr2_default, 4)
 
   def testAttributeDefaultValueIsCalled(self):
     """Tests that getter properly uses the default value."""
     MockClass = threading_utils.local_attributes(['attr'])(
         type('MockClass', (object,), {}))
     obj = MockClass()
-    obj.attr_default = 'default-value'
+    obj._attr_default = 'default-value'
     self.assertEqual(obj.attr, 'default-value')
 
   def testDefaultValueIsRead(self):
@@ -60,7 +60,7 @@ class ThreadsTest(test.TestCase):
     MockClass = threading_utils.local_attributes(['attr'])(
         type('MockClass', (object,), {}))
     obj = MockClass()
-    obj.attr_default = 'default-value'
+    obj._attr_default = 'default-value'
     # Calling the attribute is expected to initialize it with the default value.
     # Hence the pointless statement to run the getter.
     obj.attr  # pylint: disable=pointless-statement
@@ -87,7 +87,7 @@ class ThreadsTest(test.TestCase):
     MockClass = threading_utils.local_attributes(['attr'])(
         type('MockClass', (object,), {}))
     obj = MockClass()
-    obj.attr_default = 'default-value'
+    obj._attr_default = 'default-value'
     setattr(obj, _get_internal_name('attr'), 'internal-value')
     self.assertEqual(obj.attr, 'internal-value')
 
