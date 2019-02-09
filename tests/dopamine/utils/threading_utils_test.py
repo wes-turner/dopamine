@@ -17,8 +17,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tempfile
-
 from dopamine.agents.dqn import dqn_agent
 from dopamine.utils import threading_utils
 import tensorflow as tf
@@ -160,31 +158,6 @@ class ThreadsTest(test.TestCase):
     # Checks internal variables.
     self.assertEqual(getattr(obj, 'thread_1'), 1)
     self.assertEqual(getattr(obj, 'thread_2'), 2)
-
-
-class DQNIntegrationTest(test.TestCase):
-  """Integration test for DQNAgent and threading utils."""
-
-  def testBundling(self):
-    """Tests that local values are poperly updated when reading a checkpoint."""
-    with tf.Session() as sess:
-      agent = agent = dqn_agent.DQNAgent(sess, 3, observation_shape=(2, 2))
-      sess.run(tf.global_variables_initializer())
-      agent.state = 'state_val'
-      self.assertEqual(
-          getattr(agent, threading_utils._get_internal_name('state')),
-          'state_val')
-      test_dir = tempfile.mkdtemp()
-      bundle = agent.bundle_and_checkpoint(test_dir, iteration_number=10)
-      self.assertIn('state', bundle)
-      self.assertEqual(bundle['state'], 'state_val')
-      bundle['state'] = 'new_state_val'
-
-      agent.unbundle(test_dir, iteration_number=10, bundle_dictionary=bundle)
-      self.assertEqual(agent.state, 'new_state_val')
-      self.assertEqual(
-          getattr(agent, threading_utils._get_internal_name('state')),
-          'new_state_val')
 
 
 if __name__ == '__main__':
