@@ -24,30 +24,20 @@ from tensorflow import test
 
 
 _DummyClass = type('DummyClass', (object,), {})
+def _mock_thread(thread_id):
+  mock_thread = test.mock.Mock()
+  mock_thread.ident = thread_id
+  return test.mock.patch('threading.current_thread', return_value=mock_thread)
 
 
-class ThreadsTest(test.TestCase):
+class ThreadingUtilsAPITest(test.TestCase):
   """Unit tests for threading utils."""
-
-  def testGetInternalName(self):
-    """Tests that the name of the internal attribute has proper format."""
-    mock_thread_id = 12345
-    mock_thread = test.mock.Mock()
-    mock_thread.ident = mock_thread_id
-    with test.mock.patch('threading.current_thread', return_value=mock_thread):
-      self.assertEqual(threading_utils._get_internal_name('attr'),
-                       '__attr_12345')
-
-  def testGetDefaultValueName(self):
-    """Tests that the name of the internal attribute has proper format."""
-    self.assertEqual(
-        threading_utils._get_default_value_name('attr'),
-        '_attr_default')
 
   def testDefaultValueAlreadyExists(self):
     """Tests that an error is raised when overriding existing default value."""
     obj = _DummyClass()
-    obj._attr_default = 'existing-default-value'
+    threading_utils.initialize_local_attributes(
+        obj, attr='existing-default-value')
     with self.assertRaisesRegexp(
         AttributeError, 'Object `.*` already has .* attribute.'):
       threading_utils.initialize_local_attributes(obj, attr='new-default-value')
@@ -62,28 +52,108 @@ class ThreadsTest(test.TestCase):
       # value. Hence the pointless statement to run the getter.
       _ = obj.attr
 
-  def testDefaultValueIsAdded(self):
+  def testDefaultValueIsUsed(self):
+    """Tests that the default value is properly set by the helper."""
+    obj = _DummyClass()
+    threading_utils.initialize_local_attributes(obj, attr='default-value')
+    self.assertEqual(obj.attr, 'default-value')
+
+  def testMultipleDefaultValuesAreUsed(self):
+    """Tests that multiple default values are properly set by the helper."""
+    obj = _DummyClass()
+    threading_utils.initialize_local_attributes(obj, attr1=3, attr2=4)
+    self.assertEqual(obj.attr1, 3)
+    self.assertEqual(obj.attr2, 4)
+
+  def testMultiThreads(self):
+    """Tests that different threads create different local attributes."""
+    MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
+    obj = MockClass()
+    # Initializes attribute in thread 1.
+    with _mock_thread('thread_1'):
+      obj.attr = 1
+    # Initializes attribute in thread 2.
+    with _mock_thread('thread_2'):
+      obj.attr = 2
+    # Reads attribute in thread 1.
+    with _mock_thread('thread_1'):
+      self.assertEqual(obj.attr, 1)
+    # Reads attribute in thread 2.
+    with _mock_thread('thread_2'):
+      self.assertEqual(obj.attr, 2)
+
+  def testMultiThreadsMultipleAttributes(self):
+    """Tests that different threads create different local attributes."""
+    MockClass = threading_utils.local_attributes(
+        ['attr1', 'attr2'])(_DummyClass)
+    obj = MockClass()
+    # Initializes attribute in thread 1.
+    with _mock_thread('thread_1'):
+      obj.attr1 = 1
+      obj.attr2 = 2
+    with _mock_thread('thread_2'):
+      obj.attr1 = 3
+      obj.attr2 = 4
+    with _mock_thread('thread_1'):
+      self.assertEqual(obj.attr1, 1)
+      self.assertEqual(obj.attr2, 2)
+    with _mock_thread('thread_2'):
+      self.assertEqual(obj.attr1, 3)
+      self.assertEqual(obj.attr2, 4)
+
+  def testCallableAttribute(self):
+    """Tests that different threads create different local attributes."""
+    MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
+    obj = MockClass()
+    threading_utils.initialize_local_attributes(obj, attr=test.mock.Mock())
+    # Call attribute in thread 1.
+    with _mock_thread('thread_1'):
+      obj.attr()
+    # Call attribute in thread 2.
+    with _mock_thread('thread_2'):
+      obj.attr()
+
+    # Check that attribute was called once in thread 1.
+    with _mock_thread('thread_1'):
+      obj.attr.assert_called_once()
+
+    # Check that attribute was called once in thread 2.
+    with _mock_thread('thread_2'):
+      obj.attr.assert_called_once()
+
+    # Check that attribute was not called in thread 3.
+    with _mock_thread('thread_3'):
+      obj.attr.assert_not_called()
+
+
+class ThreadingUtilsImplementationTest(test.TestCase):
+  """Tests specific to `threading_utils.py` implementation."""
+
+  def testGetInternalName(self):
+    """Tests that the name of the internal attribute has proper format."""
+    with _mock_thread(123):
+      self.assertEqual(threading_utils._get_internal_name('attr'), '__attr_123')
+
+  def testGetDefaultValueName(self):
+    """Tests that the name of the internal attribute has proper format."""
+    self.assertEqual(
+        threading_utils._get_default_value_name('attr'),
+        '_attr_default')
+
+  def testDefaultValueIsSet(self):
     """Tests that the default value is properly set by the helper."""
     obj = _DummyClass()
     threading_utils.initialize_local_attributes(obj, attr=3)
     self.assertEqual(obj._attr_default, 3)
-    self.assertEqual(obj.attr, 3)
 
-  def testMultipleDefaultValuesAreSet(self):
-    """Tests that multiple default values are properly set by the helper."""
-    obj = _DummyClass()
-    threading_utils.initialize_local_attributes(obj, attr1=3, attr2=4)
-    self.assertEqual(obj._attr1_default, 3)
-    self.assertEqual(obj._attr2_default, 4)
-
-  def testAttributeDefaultValueIsCalled(self):
+  def testAttributeDefaultValueIsRead(self):
     """Tests that getter properly uses the default value."""
     MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
     obj._attr_default = 'default-value'
     self.assertEqual(obj.attr, 'default-value')
 
-  def testDefaultValueIsRead(self):
+  def testInternalAttributeIsInitialized(self):
     """Tests that getter properly initializes the local value."""
     MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
@@ -110,7 +180,7 @@ class ThreadsTest(test.TestCase):
     self.assertEqual(getattr(obj, threading_utils._get_internal_name('attr')),
                      'internal-value')
 
-  def testInternalValueOverDefault(self):
+  def testLocalValueOverDefault(self):
     """Tests that getter uese internal value over default one."""
     MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
@@ -136,29 +206,8 @@ class ThreadsTest(test.TestCase):
     obj = MockClass()
     internal_attr = test.mock.Mock()
     setattr(obj, threading_utils._get_internal_name('attr'), internal_attr)
-    obj.attr.callable_method()
-    internal_attr.callable_method.assert_called_once()
-
-  def testMultiThreads(self):
-    """Tests that different threads create different local attributes."""
-    MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
-    obj = MockClass()
-    internal_name_method = 'dopamine.utils.threading_utils._get_internal_name'
-    # Initializes attribute in thread 1.
-    with test.mock.patch(internal_name_method, return_value='thread_1'):
-      obj.attr = 1
-    # Initializes attribute in thread 2.
-    with test.mock.patch(internal_name_method, return_value='thread_2'):
-      obj.attr = 2
-    # Reads attribute in thread 1.
-    with test.mock.patch(internal_name_method, return_value='thread_1'):
-      self.assertEqual(obj.attr, 1)
-    # Reads attribute in thread 2.
-    with test.mock.patch(internal_name_method, return_value='thread_2'):
-      self.assertEqual(obj.attr, 2)
-    # Checks internal variables.
-    self.assertEqual(getattr(obj, 'thread_1'), 1)
-    self.assertEqual(getattr(obj, 'thread_2'), 2)
+    obj.attr.method()
+    internal_attr.method.assert_called_once()
 
 
 if __name__ == '__main__':
