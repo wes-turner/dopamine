@@ -18,8 +18,8 @@ The `local_attributes` class decorator defines a custom getter, setter and
 deleter for each specified attribute. These getter, setter and deleter actually
 wrap internal attributes that are thread specific.
 
-Each attribute has a default value that initializes the local value the first
-time they are called in a thread. To set these default values, use the
+Each attribute has a callable default value that initializes the local value the
+first time they are called in a thread. To set these default values, use the
 `initialize_local_attributes` helper of this module.
 
 Example of usage:
@@ -28,17 +28,20 @@ Example of usage:
   class MyClass(object):
 
     def __init__(self, attr_default_value):
-      initialize_local_attributes(self, attr=attr_default_value)
+      initialize_local_attributes(self, attr=lambda: attr_default_value)
+
+  obj = MyClass('default-value')
+  assert obj.attr == 'default-value'
   ```
 
 More precisely, for each attribute specified by the user, we create internal
 attributes that have a name specific to each thread. The custom getter, setter,
 and deleter access these internal attributes by providing the name of the
 current thread.
-To each specified attribute can also be associated a global default value that
-is stored in another internal attribute and that specifies which is the
-initial local value of the attribute in a new thread. This default value can be
-set at the object initialization.
+To each specified attribute can also be associated a global default value
+initializer that is stored as another internal attribute and that specifies
+which is the initial local value of the attribute in a new thread. This default
+value can be set at the object initialization.
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -50,9 +53,9 @@ import threading
 def _get_internal_name(name):
   """Returns the internal thread local name of an attribute.
 
-  For each specified attribute, we create a attribute which's name depends on the
-  current thread to store thread local value for that attribute. This methods
-  provides the name of this thread specific attribute.
+  For each specified attribute, we create a attribute which's name depends on
+  the current thread to store thread local value for that attribute. This
+  methods provides the name of this thread specific attribute.
 
   Args:
     name: str, name of the exposed attribute.
@@ -135,10 +138,11 @@ def local_attributes(attributes):
 def initialize_local_attributes(obj, **kwargs):
   """Sets global default values for local attributes.
 
-  Each attribute has a global default value and local values that are specific
-  to each thread.
-  In each thread, the first time the getter is called it is initialized to the
-  global default value. This helper function is to set these default value.
+  Each attribute has a global default value initializer and local values that
+  are specific to each thread.
+  In each thread, the first time the getter is called it is initialized by
+  calling the global default value initializer. This helper function is to set
+  these default value initializers.
 
   Args:
     obj: The object that has the local attributes.

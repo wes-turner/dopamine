@@ -17,10 +17,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from dopamine.agents.dqn import dqn_agent
 from dopamine.utils import test_utils
 from dopamine.utils import threading_utils
-import tensorflow as tf
 from tensorflow import test
 
 
@@ -117,7 +115,7 @@ class ThreadingUtilsAPITest(test.TestCase):
     MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
     threading_utils.initialize_local_attributes(
-        obj, attr=lambda: test.mock.Mock())
+        obj, attr=lambda: test.mock.Mock())  # pylint: disable=unnecessary-lambda
     # Call attribute in thread 1.
     with test_utils.mock_thread('thread_1'):
       obj.attr()
