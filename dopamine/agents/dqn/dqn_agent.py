@@ -201,8 +201,6 @@ class DQNAgent(object):
 
     # Variables to be initialized by the agent once it interacts with the
     # environment.
-    self._observation = None
-    self._last_observation = None
     threading_utils.initialize_local_attributes(
         self,
         _observation=lambda: None,

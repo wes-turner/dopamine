@@ -20,7 +20,9 @@ from __future__ import print_function
 import tempfile
 
 from dopamine.agents.dqn import dqn_agent
+from dopamine.utils import test_utils
 from dopamine.utils import threading_utils
+import numpy as np
 import tensorflow as tf
 from tensorflow import test
 
@@ -48,6 +50,42 @@ class DQNIntegrationTest(test.TestCase):
       self.assertEqual(
           getattr(agent, threading_utils._get_internal_name('state')),
           'new_state_val')
+
+  def testLocalValues(self):
+    """Tests that episode related variables are thread specific."""
+    with tf.Session() as sess:
+      observation_shape = (2, 2)
+      agent = agent = dqn_agent.DQNAgent(
+          sess, 3, observation_shape=observation_shape)
+      sess.run(tf.global_variables_initializer())
+
+      with test_utils.mock_thread('baseline-thread'):
+        agent.begin_episode(
+            observation=np.zeros(observation_shape), training=False)
+        local_values_1 = (agent._observation, agent._last_observation,
+                          agent.state)
+
+      with test_utils.mock_thread('different-thread'):
+        agent.begin_episode(
+            observation=np.zeros(observation_shape), training=False)
+        agent.step(
+            reward=10, observation=np.ones(observation_shape), training=False)
+        local_values_3 = (agent._observation, agent._last_observation,
+                          agent.state)
+
+      with test_utils.mock_thread('identical-thread'):
+        agent.begin_episode(
+            observation=np.zeros(observation_shape), training=False)
+        local_values_2 = (agent._observation, agent._last_observation,
+                          agent.state)
+
+      # Asserts that values in 'identical-thread' are same as baseline.
+      for val_1, val_2 in zip(local_values_1, local_values_2):
+        self.assertTrue(np.all(val_1 == val_2))
+
+      # Asserts that values in 'different-thread' are differnt from baseline.
+      for val_1, val_3 in zip(local_values_1, local_values_3):
+        self.assertTrue(np.any(val_1 != val_3))
 
 
 if __name__ == '__main__':
