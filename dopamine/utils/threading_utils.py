@@ -105,7 +105,10 @@ def _add_property(cls, attr_name):
             'initialize it locally (`self.{} = <initial-value>`) or set a '
             'global value using the `initialize_local_attributes` '
             'helper.'.format(attr_name, attr_name))
-      _set(self, getattr(self, _get_default_value_name(attr_name)))
+      _default_attr_fn = getattr(self, _get_default_value_name(attr_name))
+      if not callable(_default_attr_fn):
+        raise AttributeError('Default value initializer must be callable.')
+      _set(self, _default_attr_fn())
     return getattr(self, _get_internal_name(attr_name))
 
   def _del(self):

@@ -205,9 +205,9 @@ class DQNAgent(object):
     self._last_observation = None
     threading_utils.initialize_local_attributes(
         self,
-        _observation=None,
-        _last_observation=None,
-        state=np.zeros(state_shape))
+        _observation=lambda: None,
+        _last_observation=lambda: None,
+        state=lambda: np.zeros(state_shape))
 
   def _get_network_type(self):
     """Returns the type of the outputs of a Q value network.

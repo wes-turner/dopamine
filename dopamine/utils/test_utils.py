@@ -32,3 +32,26 @@ class MockReplayBuffer(object):
       self.add = mock.Mock()
       self.memory = mock.Mock()
       self.memory.add_count = 0
+
+
+def mock_thread(thread_id):
+  """Creates context with provided thread id.
+
+  Usage:
+    ```python
+    import threading
+
+
+    with mock_thread('my-thread-id'):
+      assert threading.current_thread().ident == 'my-thread-id'
+    ```
+
+  Args:
+    thread_id: Thread identifier.
+  Returns:
+    A context manager object which sets `threading.current_thread().ident` to
+    the provided `thread_id` value."""
+  mock_thread = tf.test.mock.Mock()
+  mock_thread.ident = thread_id
+  return tf.test.mock.patch(
+      'threading.current_thread', return_value=mock_thread)
