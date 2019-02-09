@@ -42,7 +42,7 @@ class ThreadsTest(test.TestCase):
     """Tests that the name of the internal attribute has proper format."""
     self.assertEqual(
         threading_utils._get_default_value_name('attr'),
-                       '_attr_default')
+        '_attr_default')
 
   def testDefaultValueAlreadyExists(self):
     """Tests that an error is raised when overriding existing default value."""
@@ -60,13 +60,14 @@ class ThreadsTest(test.TestCase):
         AttributeError, 'Local value for attribute `attr` has not been set.*'):
       # Calling the attribute is expected to initialize it with the default
       # value. Hence the pointless statement to run the getter.
-      obj.attr  # pylint: disable=pointless-statement
+      _ = obj.attr
 
   def testDefaultValueIsAdded(self):
     """Tests that the default value is properly set by the helper."""
     obj = _DummyClass()
     threading_utils.initialize_local_attributes(obj, attr=3)
     self.assertEqual(obj._attr_default, 3)
+    self.assertEqual(obj.attr, 3)
 
   def testMultipleDefaultValuesAreSet(self):
     """Tests that multiple default values are properly set by the helper."""
@@ -89,7 +90,7 @@ class ThreadsTest(test.TestCase):
     obj._attr_default = 'default-value'
     # Calling the attribute is expected to initialize it with the default value.
     # Hence the pointless statement to run the getter.
-    obj.attr  # pylint: disable=pointless-statement
+    _ = obj.attr
     self.assertEqual(getattr(obj, threading_utils._get_internal_name('attr')),
                      'default-value')
 
@@ -98,8 +99,8 @@ class ThreadsTest(test.TestCase):
     MockClass = threading_utils.local_attributes(['attr'])(
         _DummyClass)
     obj = MockClass()
-    setattr(obj, threading_utils._get_internal_name('attr'), 'intenal-value')
-    self.assertEqual(obj.attr, 'intenal-value')
+    setattr(obj, threading_utils._get_internal_name('attr'), 'internal-value')
+    self.assertEqual(obj.attr, 'internal-value')
 
   def testInternalAttributeIsSet(self):
     """Tests that setter properly sets the internal value."""

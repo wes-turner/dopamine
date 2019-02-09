@@ -50,5 +50,5 @@ class DQNIntegrationTest(test.TestCase):
           'new_state_val')
 
 
-  if __name__ == '__main__':
-    test.main()
+if __name__ == '__main__':
+  test.main()
