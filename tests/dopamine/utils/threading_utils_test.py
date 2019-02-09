@@ -18,7 +18,6 @@ from __future__ import division
 from __future__ import print_function
 
 import tempfile
-import threading
 
 from dopamine.agents.dqn import dqn_agent
 from dopamine.utils import threading_utils
@@ -26,16 +25,26 @@ import tensorflow as tf
 from tensorflow import test
 
 
-def _get_internal_name(attr):
-  thread_id = str(threading.current_thread().ident)
-  return '__' + attr + '_' + thread_id
-
-
 _DummyClass = type('DummyClass', (object,), {})
 
 
 class ThreadsTest(test.TestCase):
   """Unit tests for threading utils."""
+
+  def testGetInternalName(self):
+    """Tests that the name of the internal attribute has proper format."""
+    mock_thread_id = 12345
+    mock_thread = test.mock.Mock()
+    mock_thread.ident = mock_thread_id
+    with test.mock.patch('threading.current_thread', return_value=mock_thread):
+      self.assertEqual(threading_utils._get_internal_name('attr'),
+                       '__attr_12345')
+
+  def testGetDefaultValueName(self):
+    """Tests that the name of the internal attribute has proper format."""
+    self.assertEqual(
+        threading_utils._get_default_value_name('attr'),
+                       '_attr_default')
 
   def testDefaultValueAlreadyExists(self):
     """Tests that an error is raised when overriding existing default value."""
@@ -83,14 +92,15 @@ class ThreadsTest(test.TestCase):
     # Calling the attribute is expected to initialize it with the default value.
     # Hence the pointless statement to run the getter.
     obj.attr  # pylint: disable=pointless-statement
-    self.assertEqual(getattr(obj, _get_internal_name('attr')), 'default-value')
+    self.assertEqual(getattr(obj, threading_utils._get_internal_name('attr')),
+                     'default-value')
 
   def testInternalAttributeIsRead(self):
     """Tests that getter properly uses the internal value."""
     MockClass = threading_utils.local_attributes(['attr'])(
         _DummyClass)
     obj = MockClass()
-    setattr(obj, _get_internal_name('attr'), 'intenal-value')
+    setattr(obj, threading_utils._get_internal_name('attr'), 'intenal-value')
     self.assertEqual(obj.attr, 'intenal-value')
 
   def testInternalAttributeIsSet(self):
@@ -98,14 +108,15 @@ class ThreadsTest(test.TestCase):
     MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
     obj.attr = 'internal-value'
-    self.assertEqual(getattr(obj, _get_internal_name('attr')), 'internal-value')
+    self.assertEqual(getattr(obj, threading_utils._get_internal_name('attr')),
+                     'internal-value')
 
   def testInternalValueOverDefault(self):
     """Tests that getter uese internal value over default one."""
     MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
     obj._attr_default = 'default-value'
-    setattr(obj, _get_internal_name('attr'), 'internal-value')
+    setattr(obj, threading_utils._get_internal_name('attr'), 'internal-value')
     self.assertEqual(obj.attr, 'internal-value')
 
   def testMultipleAttributes(self):
@@ -115,8 +126,8 @@ class ThreadsTest(test.TestCase):
     obj = MockClass()
     obj.attr1 = 10
     obj.attr2 = 20
-    setattr(obj, _get_internal_name('attr1'), 1)
-    setattr(obj, _get_internal_name('attr2'), 2)
+    setattr(obj, threading_utils._get_internal_name('attr1'), 1)
+    setattr(obj, threading_utils._get_internal_name('attr2'), 2)
     self.assertEqual(obj.attr1, 1)
     self.assertEqual(obj.attr2, 2)
 
@@ -125,7 +136,7 @@ class ThreadsTest(test.TestCase):
     MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
     internal_attr = test.mock.Mock()
-    setattr(obj, _get_internal_name('attr'), internal_attr)
+    setattr(obj, threading_utils._get_internal_name('attr'), internal_attr)
     obj.attr.callable_method()
     internal_attr.callable_method.assert_called_once()
 
@@ -161,7 +172,8 @@ class DQNIntegrationTest(test.TestCase):
       sess.run(tf.global_variables_initializer())
       agent.state = 'state_val'
       self.assertEqual(
-          getattr(agent, _get_internal_name('state')), 'state_val')
+          getattr(agent, threading_utils._get_internal_name('state')),
+          'state_val')
       test_dir = tempfile.mkdtemp()
       bundle = agent.bundle_and_checkpoint(test_dir, iteration_number=10)
       self.assertIn('state', bundle)
@@ -171,7 +183,8 @@ class DQNIntegrationTest(test.TestCase):
       agent.unbundle(test_dir, iteration_number=10, bundle_dictionary=bundle)
       self.assertEqual(agent.state, 'new_state_val')
       self.assertEqual(
-          getattr(agent, _get_internal_name('state')), 'new_state_val')
+          getattr(agent, threading_utils._get_internal_name('state')),
+          'new_state_val')
 
 
 if __name__ == '__main__':
