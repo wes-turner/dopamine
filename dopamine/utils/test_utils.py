@@ -50,7 +50,7 @@ def mock_thread(thread_id):
   Returns:
     A context manager object which sets `threading.current_thread().ident` to
     the provided `thread_id` value."""
-  mock_thread = tf.test.mock.Mock()
-  mock_thread.ident = thread_id
+  mock_thread_obj = tf.test.mock.Mock()
+  mock_thread_obj.ident = thread_id
   return tf.test.mock.patch(
-      'threading.current_thread', return_value=mock_thread)
+      'threading.current_thread', return_value=mock_thread_obj)
