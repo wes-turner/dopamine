@@ -17,8 +17,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tempfile
-
 from dopamine.agents.dqn import dqn_agent
 from dopamine.utils import test_utils
 from dopamine.utils import threading_utils
@@ -39,13 +37,14 @@ class DQNIntegrationTest(test.TestCase):
       self.assertEqual(
           getattr(agent, threading_utils._get_internal_name('state')),
           'state_val')
-      test_dir = tempfile.mkdtemp()
-      bundle = agent.bundle_and_checkpoint(test_dir, iteration_number=10)
+      bundle = agent.bundle_and_checkpoint(
+          self.get_temp_dir(), iteration_number=10)
       self.assertIn('state', bundle)
       self.assertEqual(bundle['state'], 'state_val')
       bundle['state'] = 'new_state_val'
 
-      agent.unbundle(test_dir, iteration_number=10, bundle_dictionary=bundle)
+      agent.unbundle(
+          self.get_temp_dir(), iteration_number=10, bundle_dictionary=bundle)
       self.assertEqual(agent.state, 'new_state_val')
       self.assertEqual(
           getattr(agent, threading_utils._get_internal_name('state')),
