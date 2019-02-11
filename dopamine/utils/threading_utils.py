@@ -98,9 +98,30 @@ def _add_property(cls, attr_name):
     attr_name: str, name of the property to create.
   """
   def _set(self, val):
+    """Defines a custom setter for the attribute.
+
+    This setter assigns the value to the internal local variable.
+
+    Args:
+      val: The value to assign to the attribute.
+    """
     setattr(self, _get_internal_name(attr_name), val)
 
   def _get(self):
+    """Defines a custom getter for the attribute.
+
+    This getter reads and returns the internal local variable. If this local
+    variable has not been initialized the getter will look for the global
+    initializer and initialize the local variable.
+
+    Returns:
+      The value of the local attribute.
+
+    Raises:
+      AttributeError: If the local variable has not been set and no global
+        initializer was specified.
+      AttributeError: If the specified global initializer is not callable.
+    """
     if not hasattr(self, _get_internal_name(attr_name)):
       if not hasattr(self, _get_default_value_name(attr_name)):
         raise AttributeError(
@@ -115,6 +136,7 @@ def _add_property(cls, attr_name):
     return getattr(self, _get_internal_name(attr_name))
 
   def _del(self):
+    """Defines a custom deleter that deletes the local variable."""
     delattr(self, _get_internal_name(attr_name))
 
   setattr(cls, attr_name, property(_get, _set, _del))
