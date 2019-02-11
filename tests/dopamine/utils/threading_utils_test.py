@@ -114,8 +114,7 @@ class ThreadingUtilsAPITest(test.TestCase):
     """Tests that different attributes are initialized in each thread.."""
     MockClass = threading_utils.local_attributes(['attr'])(_DummyClass)
     obj = MockClass()
-    threading_utils.initialize_local_attributes(
-        obj, attr=lambda: test.mock.Mock())  # pylint: disable=unnecessary-lambda
+    threading_utils.initialize_local_attributes(obj, attr=test.mock.Mock)
     # Call attribute in thread 1.
     with test_utils.mock_thread('thread_1'):
       obj.attr()
