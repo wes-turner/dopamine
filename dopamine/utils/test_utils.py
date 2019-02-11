@@ -19,7 +19,6 @@ from __future__ import division
 from __future__ import print_function
 
 
-
 import mock
 import tensorflow as tf
 
@@ -49,7 +48,8 @@ def mock_thread(thread_id):
     thread_id: Thread identifier.
   Returns:
     A context manager object which sets `threading.current_thread().ident` to
-    the provided `thread_id` value."""
+    the provided `thread_id` value.
+  """
   mock_thread_obj = tf.test.mock.Mock()
   mock_thread_obj.ident = thread_id
   return tf.test.mock.patch(
