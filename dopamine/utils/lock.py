@@ -28,6 +28,7 @@ _DEFAULT_LOCK_ATTR_NAME = '_lock'
 
 
 def get_default_lock():
+  """Returns default lock object."""
   return threading.Lock()
 
 
