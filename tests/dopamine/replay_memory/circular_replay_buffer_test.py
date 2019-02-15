@@ -43,12 +43,13 @@ class CheckpointableClass(object):
     self.attribute = 0
 
 
-def _create_dummy_memory():
+def _create_dummy_memory(**kwargs):
   return circular_replay_buffer.OutOfGraphReplayBuffer(
       observation_shape=(2,),
       stack_size=1,
       replay_capacity=10,
-      batch_size=2)
+      batch_size=2,
+      **kwargs)
 
 
 class OutOfGraphReplayBufferTest(tf.test.TestCase):
@@ -673,6 +674,11 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     """Tests that lock attribute is initialized properly."""
     memory = _create_dummy_memory()
     self.assertTrue(hasattr(memory, '_lock'))
+
+  def testMemoryHasASpecifiedLock(self):
+    """Tests that lock attribute is initialized properly."""
+    memory = _create_dummy_memory(lock='lock-name')
+    self.assertEqual(memory._lock, 'lock-name')
 
 
 class WrappedReplayBufferTest(tf.test.TestCase):

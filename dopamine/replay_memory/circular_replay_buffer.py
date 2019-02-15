@@ -110,7 +110,8 @@ class OutOfGraphReplayBuffer(object):
                action_shape=(),
                action_dtype=np.int32,
                reward_shape=(),
-               reward_dtype=np.float32):
+               reward_dtype=np.float32,
+               lock=lock_lib.get_default_lock()):
     """Initializes OutOfGraphReplayBuffer.
 
     Args:
@@ -132,6 +133,8 @@ class OutOfGraphReplayBuffer(object):
       reward_shape: tuple of ints, the shape of the reward vector. Empty tuple
         means the reward is a scalar.
       reward_dtype: np.dtype, type of elements in the reward.
+      lock: lock object to use for protection against concurrent access. If
+        `None` then locking is disabled.
 
     Raises:
       ValueError: If replay_capacity is too small to hold at least one
@@ -179,7 +182,7 @@ class OutOfGraphReplayBuffer(object):
         [math.pow(self._gamma, n) for n in range(update_horizon)],
         dtype=np.float32)
 
-    lock_lib.initialize_lock(self)
+    lock_lib.initialize_lock(self, lock=lock)
 
   def _create_storage(self):
     """Creates the numpy arrays used to store transitions.

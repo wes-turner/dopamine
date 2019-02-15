@@ -27,7 +27,11 @@ _DEFAULT_LOCK_ATTR_NAME = '_lock'
 # same time (i.e. less restrictive).
 
 
-def initialize_lock(object_to_lock, lock=threading.Lock(),
+def get_default_lock():
+  return threading.Lock()
+
+
+def initialize_lock(object_to_lock, lock=get_default_lock(),
                     lock_attribute_name=_DEFAULT_LOCK_ATTR_NAME):
   """Initializes a lock attribute for a specified object.
 
