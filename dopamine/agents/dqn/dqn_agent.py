@@ -74,7 +74,7 @@ def identity_epsilon(unused_decay_period, unused_step, unused_warmup_steps,
 
 @gin.configurable
 @threading_utils.local_attributes(['_last_observation', '_observation', 'state',
-                                   'action'])
+                                   'action', 'eval_mode'])
 class DQNAgent(object):
   """An implementation of the DQN agent."""
 
@@ -174,7 +174,6 @@ class DQNAgent(object):
     self.epsilon_eval = epsilon_eval
     self.epsilon_decay_period = epsilon_decay_period
     self.update_period = update_period
-    self.eval_mode = False
     self.training_steps = 0
     self.optimizer = optimizer
     self.summary_writer = summary_writer
@@ -205,7 +204,8 @@ class DQNAgent(object):
         self,
         _observation=lambda: None,
         _last_observation=lambda: None,
-        state=lambda: np.zeros(state_shape))
+        state=lambda: np.zeros(state_shape),
+        eval_mode=lambda: False)
 
   def _get_network_type(self):
     """Returns the type of the outputs of a Q value network.
