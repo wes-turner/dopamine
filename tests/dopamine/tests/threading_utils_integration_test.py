@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl.testing import parameterized
 from dopamine.agents.dqn import dqn_agent
 from dopamine.utils import test_utils
 import numpy as np
@@ -24,13 +25,13 @@ import tensorflow as tf
 from tensorflow import test
 
 
-class DQNIntegrationTest(test.TestCase):
+class DQNIntegrationTest(test.TestCase, parameterized.TestCase):
   """Integration test for DQNAgent and threading utils."""
 
   def testBundling(self):
     """Tests that local values are poperly updated when reading a checkpoint."""
     with tf.Session() as sess:
-      agent = agent = dqn_agent.DQNAgent(sess, 3, observation_shape=(2, 2))
+      agent = dqn_agent.DQNAgent(sess, 3, observation_shape=(2, 2))
       sess.run(tf.global_variables_initializer())
       agent.state = 'state_val'
       bundle = agent.bundle_and_checkpoint(
@@ -49,7 +50,7 @@ class DQNIntegrationTest(test.TestCase):
     """Tests that episode related variables are thread specific."""
     with tf.Session() as sess:
       observation_shape = (2, 2)
-      agent = agent = dqn_agent.DQNAgent(
+      agent = dqn_agent.DQNAgent(
           sess, 3, observation_shape=observation_shape)
       sess.run(tf.global_variables_initializer())
 
@@ -80,6 +81,26 @@ class DQNIntegrationTest(test.TestCase):
       # Asserts that values in 'different-thread' are differnt from baseline.
       for val_1, val_3 in zip(local_values_1, local_values_3):
         self.assertTrue(np.any(val_1 != val_3))
+
+  @parameterized.parameters([('_last_observation', None),
+                             ('_observation', None),
+                             ('state', np.zeros((1, 2, 2, 4))),
+                             ('eval_mode', False)])
+  def testLocalVariablesSet(self, variable_name, expected_value):
+    agent = dqn_agent.DQNAgent(
+        tf.Session(), 3, observation_shape=(2, 2), stack_size=4)
+    setattr(agent, variable_name, 'dummy-value')
+    with test_utils.mock_thread('thread'):
+      self.assertAllEqual(getattr(agent, variable_name), expected_value)
+
+  def testActionIsNotDefined(self):
+    agent = dqn_agent.DQNAgent(tf.Session(), 3, observation_shape=(2, 2))
+    agent.action = 'dummy-value'
+    with test_utils.mock_thread('thread'):
+      with self.assertRaisesRegexp(
+          AttributeError,
+          'Local value for attribute `action` has not been set.*'):
+          _ = agent.action
 
 
 if __name__ == '__main__':
