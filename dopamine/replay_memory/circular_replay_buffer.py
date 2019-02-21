@@ -30,6 +30,7 @@ import math
 import os
 import pickle
 
+from dopamine.utils import lock as lock_lib
 import numpy as np
 import tensorflow as tf
 
@@ -109,7 +110,8 @@ class OutOfGraphReplayBuffer(object):
                action_shape=(),
                action_dtype=np.int32,
                reward_shape=(),
-               reward_dtype=np.float32):
+               reward_dtype=np.float32,
+               lock=lock_lib.get_default_lock()):
     """Initializes OutOfGraphReplayBuffer.
 
     Args:
@@ -131,6 +133,8 @@ class OutOfGraphReplayBuffer(object):
       reward_shape: tuple of ints, the shape of the reward vector. Empty tuple
         means the reward is a scalar.
       reward_dtype: np.dtype, type of elements in the reward.
+      lock: lock object to use for protection against concurrent access. If
+        `None` then locking is disabled.
 
     Raises:
       ValueError: If replay_capacity is too small to hold at least one
@@ -177,6 +181,8 @@ class OutOfGraphReplayBuffer(object):
     self._cumulative_discount_vector = np.array(
         [math.pow(self._gamma, n) for n in range(update_horizon)],
         dtype=np.float32)
+
+    lock_lib.initialize_lock(self, lock=lock)
 
   def _create_storage(self):
     """Creates the numpy arrays used to store transitions.
@@ -227,6 +233,7 @@ class OutOfGraphReplayBuffer(object):
           np.zeros(element_type.shape, dtype=element_type.type))
     self._add(*zero_transition)
 
+  @lock_lib.locked_method()
   def add(self, observation, action, reward, terminal, *args):
     """Adds a transition to the replay memory.
 
@@ -450,6 +457,7 @@ class OutOfGraphReplayBuffer(object):
 
     return indices
 
+  @lock_lib.locked_method()
   def sample_transition_batch(self, batch_size=None, indices=None):
     """Returns a batch of transitions (including any extra contents).
 
@@ -583,6 +591,7 @@ class OutOfGraphReplayBuffer(object):
         checkpointable_elements[member_name] = member
     return checkpointable_elements
 
+  @lock_lib.locked_method()
   def save(self, checkpoint_dir, iteration_number):
     """Save the OutOfGraphReplayBuffer attributes into a file.
 
@@ -627,6 +636,7 @@ class OutOfGraphReplayBuffer(object):
         except tf.errors.NotFoundError:
           pass
 
+  @lock_lib.locked_method()
   def load(self, checkpoint_dir, suffix):
     """Restores the object from bundle_dictionary and numpy checkpoints.
 

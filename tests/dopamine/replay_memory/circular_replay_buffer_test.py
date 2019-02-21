@@ -20,8 +20,7 @@ from __future__ import print_function
 import gzip
 import os
 import shutil
-
-
+import mock
 
 from absl import flags
 from dopamine.replay_memory import circular_replay_buffer
@@ -42,6 +41,15 @@ class CheckpointableClass(object):
 
   def __init__(self):
     self.attribute = 0
+
+
+def _create_dummy_memory(**kwargs):
+  return circular_replay_buffer.OutOfGraphReplayBuffer(
+      observation_shape=(2,),
+      stack_size=1,
+      replay_capacity=10,
+      batch_size=2,
+      **kwargs)
 
 
 class OutOfGraphReplayBufferTest(tf.test.TestCase):
@@ -638,6 +646,40 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     self.assertEqual(memory.add_count, self._test_add_count)
     self.assertAllClose(memory.invalid_range, self._test_invalid_range)
 
+  def testMemoryLocksItself(self):
+    """Tests that adding an element to the buffer blocks the lock."""
+    memory = _create_dummy_memory()
+    memory._lock = mock.MagicMock()
+
+    # Add one element.
+    memory.add((1, 2), 0, 0, False)
+    # Check that buffer contains one element.
+    self.assertEqual(memory.add_count, 1)
+    # Check that the lock went throughh the proper lock/unlock process.
+    memory._lock.__enter__.assert_called_once()
+    memory._lock.__exit__.assert_called_once()
+
+  def testAddMethodIsBlockedWhenLockIsHeld(self):
+    """Tests that when the lock is blocked elements cannot be added."""
+    memory = _create_dummy_memory()
+    memory._lock = mock.MagicMock()
+    memory._lock.__enter__ = mock.Mock(
+        side_effect=ValueError('Lock is locked.'))
+    with self.assertRaisesRegexp(ValueError, 'Lock is locked.'):
+      memory.add((1, 2), 0, 0, False)
+    # Check that the second element was not added.
+    self.assertEqual(memory.add_count, 0)
+
+  def testMemoryHasAProperLock(self):
+    """Tests that lock attribute is initialized properly."""
+    memory = _create_dummy_memory()
+    self.assertTrue(hasattr(memory, '_lock'))
+
+  def testMemoryHasASpecifiedLock(self):
+    """Tests that lock attribute is initialized properly."""
+    memory = _create_dummy_memory(lock='lock-name')
+    self.assertEqual(memory._lock, 'lock-name')
+
 
 class WrappedReplayBufferTest(tf.test.TestCase):
 
@@ -817,6 +859,21 @@ class WrappedReplayBufferTest(tf.test.TestCase):
         observation_shape=OBSERVATION_SHAPE,
         stack_size=STACK_SIZE, replay_capacity=10, observation_dtype=np.int32)
     self.assertEqual(replay.memory._store['observation'].dtype, np.int32)
+
+  def testReplayBufferIsLocked(self):
+    """Tests that the is properly checked."""
+    replay = circular_replay_buffer.WrappedReplayBuffer(
+        observation_shape=(2,),
+        stack_size=1,
+        replay_capacity=10,
+        batch_size=2)
+    lock = mock.MagicMock()
+    replay.memory._lock = lock
+    # Add one element.
+    replay.add((1, 2), 0, 0, False)
+    # Check that the lock went through the proper lock/unlock process.
+    lock.__enter__.assert_called_once()
+    lock.__exit__.assert_called_once()
 
 
 if __name__ == '__main__':

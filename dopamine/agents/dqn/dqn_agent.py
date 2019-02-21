@@ -23,8 +23,6 @@ import math
 import os
 import random
 
-
-
 from dopamine.discrete_domains import atari_lib
 from dopamine.replay_memory import circular_replay_buffer
 import numpy as np
