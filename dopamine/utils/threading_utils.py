@@ -94,7 +94,7 @@ def _add_property(cls, attr_name):
   See `initialize_local_attributes` for more details.
 
   Args:
-    cls: A class to add the poperty to.
+    cls: A class to add the property to.
     attr_name: str, name of the property to create.
   """
   def _set(self, val):
