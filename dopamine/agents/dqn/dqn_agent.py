@@ -25,6 +25,7 @@ import random
 
 from dopamine.discrete_domains import atari_lib
 from dopamine.replay_memory import circular_replay_buffer
+from dopamine.utils import threading_utils
 import numpy as np
 import tensorflow as tf
 
@@ -72,6 +73,8 @@ def identity_epsilon(unused_decay_period, unused_step, unused_warmup_steps,
 
 
 @gin.configurable
+@threading_utils.local_attributes(['_last_observation', '_observation', 'state',
+                                   'action', 'eval_mode'])
 class DQNAgent(object):
   """An implementation of the DQN agent."""
 
@@ -171,7 +174,6 @@ class DQNAgent(object):
     self.epsilon_eval = epsilon_eval
     self.epsilon_decay_period = epsilon_decay_period
     self.update_period = update_period
-    self.eval_mode = False
     self.training_steps = 0
     self.optimizer = optimizer
     self.summary_writer = summary_writer
@@ -181,7 +183,6 @@ class DQNAgent(object):
       # Create a placeholder for the state input to the DQN network.
       # The last axis indicates the number of consecutive frames stacked.
       state_shape = (1,) + self.observation_shape + (stack_size,)
-      self.state = np.zeros(state_shape)
       self.state_ph = tf.placeholder(self.observation_dtype, state_shape,
                                      name='state_ph')
       self._replay = self._build_replay_buffer(use_staging)
@@ -199,8 +200,12 @@ class DQNAgent(object):
 
     # Variables to be initialized by the agent once it interacts with the
     # environment.
-    self._observation = None
-    self._last_observation = None
+    threading_utils.initialize_local_attributes(
+        self,
+        _observation=lambda: None,
+        _last_observation=lambda: None,
+        state=lambda: np.zeros(state_shape),
+        eval_mode=lambda: False)
 
   def _get_network_type(self):
     """Returns the type of the outputs of a Q value network.
@@ -323,11 +328,12 @@ class DQNAgent(object):
       sync_qt_ops.append(w_target.assign(w_online, use_locking=True))
     return sync_qt_ops
 
-  def begin_episode(self, observation):
+  def begin_episode(self, observation, training=True):
     """Returns the agent's first action for this episode.
 
     Args:
       observation: numpy array, the environment's initial observation.
+      training: bool, whether to also run a training step.
 
     Returns:
       int, the selected action.
@@ -335,13 +341,13 @@ class DQNAgent(object):
     self._reset_state()
     self._record_observation(observation)
 
-    if not self.eval_mode:
+    if not self.eval_mode and training:
       self._train_step()
 
     self.action = self._select_action()
     return self.action
 
-  def step(self, reward, observation):
+  def step(self, reward, observation, training=True):
     """Records the most recent transition and returns the agent's next action.
 
     We store the observation of the last time step since we want to store it
@@ -350,6 +356,7 @@ class DQNAgent(object):
     Args:
       reward: float, the reward received from the agent's most recent action.
       observation: numpy array, the most recent observation.
+      training: bool, whether to also run a training step.
 
     Returns:
       int, the selected action.
@@ -359,7 +366,8 @@ class DQNAgent(object):
 
     if not self.eval_mode:
       self._store_transition(self._last_observation, self.action, reward, False)
-      self._train_step()
+      if training:
+        self._train_step()
 
     self.action = self._select_action()
     return self.action
@@ -519,9 +527,9 @@ class DQNAgent(object):
       self._replay.load(checkpoint_dir, iteration_number)
     except tf.errors.NotFoundError:
       return False
-    for key in self.__dict__:
-      if key in bundle_dictionary:
-        self.__dict__[key] = bundle_dictionary[key]
+    for key in bundle_dictionary:
+      if hasattr(self, key):
+        setattr(self, key, bundle_dictionary[key])
     # Restore the agent's TensorFlow graph.
     self._saver.restore(self._sess,
                         os.path.join(checkpoint_dir,
