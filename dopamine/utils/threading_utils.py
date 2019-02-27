@@ -53,9 +53,9 @@ import threading
 def _get_internal_name(name):
   """Returns the internal thread local name of an attribute.
 
-  For each specified attribute, we create a attribute which's name depends on
+  For each specified attribute, we create an attribute whose name depends on
   the current thread to store thread local value for that attribute. This
-  methods provides the name of this thread specific attribute.
+  method provides the name of this thread specific attribute.
 
   Args:
     name: str, name of the exposed attribute.
@@ -69,7 +69,7 @@ def _get_default_value_name(name):
   """Returns the global default value of an attribute.
 
   For each specified attribute, we create a global default value that is
-  object-specific and not thread-specific. This gloal deafault value is stored
+  object-specific and not thread-specific. This global default value is stored
   in an internal attribute that is named `_attr_default` where `attr` is the
   name of the specified attribute.
 
@@ -84,9 +84,9 @@ def _get_default_value_name(name):
 def _add_property(cls, attr_name):
   """Adds a property to a given class.
 
-  The a setter, getter and deleter are added to the given class with to the
-  provided attribute name.
-  These methods actually apply to an intenal variable that is thread-specific.
+  The setter, getter and deleter are added to the given class and correspond to
+  the provided attribute name.
+  These methods actually apply to an internal variable that is thread-specific.
   Hence the result of these methods depends on the local thread.
 
   Note that when the getter is called and the local attribute is not found the
@@ -143,7 +143,7 @@ def _add_property(cls, attr_name):
 
 
 def local_attributes(attributes):
-  """Creates a decorator that add properties to the decorated class.
+  """Creates a decorator that adds properties to the decorated class.
 
   Args:
     attributes: List[str], names of the wrapped attributes to add to the class.
