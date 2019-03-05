@@ -52,33 +52,6 @@ CHECKPOINT_DURATION = 4
 MAX_SAMPLE_ATTEMPTS = 1000
 
 
-def invalid_range(cursor, replay_capacity, stack_size, update_horizon):
-  """Returns a array with the indices of cursor-related invalid transitions.
-
-  There are update_horizon + stack_size invalid indices:
-    - The update_horizon indices before the cursor, because we do not have a
-      valid N-step transition (including the next state).
-    - The stack_size indices on or immediately after the cursor.
-  If N = update_horizon, K = stack_size, and the cursor is at c, invalid
-  indices are:
-    c - N, c - N + 1, ..., c, c + 1, ..., c + K - 1.
-
-  It handles special cases in a circular buffer in the beginning and the end.
-
-  Args:
-    cursor: int, the position of the cursor.
-    replay_capacity: int, the size of the replay memory.
-    stack_size: int, the size of the stacks returned by the replay memory.
-    update_horizon: int, the agent's update horizon.
-  Returns:
-    np.array of size stack_size with the invalid indices.
-  """
-  assert cursor < replay_capacity
-  return np.array(
-      [(cursor - update_horizon + i) % replay_capacity
-       for i in range(stack_size + update_horizon)])
-
-
 class OutOfGraphReplayBuffer(object):
   """A simple out-of-graph Replay Buffer.
 
@@ -187,11 +160,25 @@ class OutOfGraphReplayBuffer(object):
   def _create_storage(self):
     """Creates the numpy arrays used to store transitions.
     """
-    self._store = {}
-    for storage_element in self.get_storage_signature():
-      array_shape = [self._replay_capacity] + list(storage_element.shape)
-      self._store[storage_element.name] = np.empty(
-          array_shape, dtype=storage_element.type)
+    self._transitions = []
+    self._transition_lengths = []
+
+  def _is_terminal(self, transition):
+    return transition['terminal'][-1]
+
+  def _get_last_transition(self):
+    if self._transitions:
+      transition = self._transitions[-1]
+      if not self._is_terminal(transition):
+        return -1
+    new_transition = collections.defaultdict(lambda: [])
+    self._transitions.append(new_transition)
+    self._transition_lengths.append(0)
+    for _ in range(self._stack_size - 1):
+      # Child classes can rely on the padding transitions being filled with
+      # zeros. This is useful when there is a priority argument.
+      self._add_zero_transition()
+    return self._get_last_transition()
 
   def get_add_args_signature(self):
     """The signature of the add function.
@@ -233,6 +220,12 @@ class OutOfGraphReplayBuffer(object):
           np.zeros(element_type.shape, dtype=element_type.type))
     self._add(*zero_transition)
 
+  def _maintain_buffer_size(self):
+    """Removes first transition from buffer if buffer is full."""
+    if self.is_full():
+      self._transitions.pop(0)
+      self.add_count -= self._lengths.pop(0)
+
   @lock_lib.locked_method()
   def add(self, observation, action, reward, terminal, *args):
     """Adds a transition to the replay memory.
@@ -255,29 +248,32 @@ class OutOfGraphReplayBuffer(object):
         extra_storage_types.
     """
     self._check_add_types(observation, action, reward, terminal, *args)
-    if self.is_empty() or self._store['terminal'][self.cursor() - 1] == 1:
-      for _ in range(self._stack_size - 1):
-        # Child classes can rely on the padding transitions being filled with
-        # zeros. This is useful when there is a priority argument.
-        self._add_zero_transition()
-    self._add(observation, action, reward, terminal, *args)
+    transition_index = self._get_last_transition()
+    self._add(transition_index, observation, action, reward, terminal, *args)
 
-  def _add(self, *args):
+  def _add(self, transition_index, *args):
     """Internal add method to add to the storage arrays.
 
     Args:
+      transition_index: int, index of the transition to add to.
       *args: All the elements in a transition.
-    """
-    cursor = self.cursor()
 
+    Raises:
+      ValueError: If `transition_index` is not in the range
+        [0, len(self._transitions)].
+    """
+    if not (0 <= transition_index < len(self._transitions)):
+      raise ValueError(
+          '`transition_index` must be in the '
+          'range [0, {}[. Given {} instead.'.format(
+              len(self._transitions), transition_index))
     arg_names = [e.name for e in self.get_add_args_signature()]
     for arg_name, arg in zip(arg_names, args):
-      self._store[arg_name][cursor] = arg
+      self._transitions[transition_index][arg_name].append(arg)
 
     self.add_count += 1
-    self.invalid_range = invalid_range(
-        self.cursor(), self._replay_capacity, self._stack_size,
-        self._update_horizon)
+    self._lengths[transition_index] += 1
+    self._maintain_buffer_size()
 
   def _check_add_types(self, *args):
     """Checks if args passed to the add method match those of the storage.
@@ -312,40 +308,6 @@ class OutOfGraphReplayBuffer(object):
   def is_full(self):
     """Is the Replay Buffer full?"""
     return self.add_count >= self._replay_capacity
-
-  def cursor(self):
-    """Index to the location where the next transition will be written."""
-    return self.add_count % self._replay_capacity
-
-  def get_range(self, array, start_index, end_index):
-    """Returns the range of array at the index handling wraparound if necessary.
-
-    Args:
-      array: np.array, the array to get the stack from.
-      start_index: int, index to the start of the range to be returned. Range
-        will wraparound if start_index is smaller than 0.
-      end_index: int, exclusive end index. Range will wraparound if end_index
-        exceeds replay_capacity.
-
-    Returns:
-      np.array, with shape [end_index - start_index, array.shape[1:]].
-    """
-    assert end_index > start_index, 'end_index must be larger than start_index'
-    assert end_index >= 0
-    assert start_index < self._replay_capacity
-    if not self.is_full():
-      assert end_index <= self.cursor(), (
-          'Index {} has not been added.'.format(start_index))
-
-    # Fast slice read when there is no wraparound.
-    if start_index % self._replay_capacity < end_index % self._replay_capacity:
-      return_array = array[start_index:end_index, ...]
-    # Slow list read.
-    else:
-      indices = [(start_index + i) % self._replay_capacity
-                 for i in range(end_index - start_index)]
-      return_array = array[indices, ...]
-    return return_array
 
   def get_observation_stack(self, index):
     return self._get_element_stack(index, 'observation')
