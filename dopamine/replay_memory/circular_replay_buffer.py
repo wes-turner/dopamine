@@ -160,25 +160,34 @@ class OutOfGraphReplayBuffer(object):
   def _create_storage(self):
     """Creates the numpy arrays used to store transitions.
     """
-    self._transitions = []
-    self._transition_lengths = []
+    self._store = {}
+    for storage_element in self.get_storage_signature():
+      array_shape = [self._replay_capacity] + list(storage_element.shape)
+      self._store[storage_element.name] = np.empty(
+          array_shape, dtype=storage_element.type)
+    self._trajectories = []
+    self._trajectory_lengths = []
 
-  def _is_terminal(self, transition):
-    return transition['terminal'][-1]
+  def _is_terminal(self, trajectory):
+    return trajectory['terminal'][-1]
 
-  def _get_last_transition(self):
-    if self._transitions:
-      transition = self._transitions[-1]
+  def _get_last_trajectory(self):
+    if self._trajectories:
+      transition = self._trajectories[-1]
       if not self._is_terminal(transition):
         return -1
+      else:
+        for key, array in transition:
+          transition[key] = np.array(array)
+
     new_transition = collections.defaultdict(lambda: [])
-    self._transitions.append(new_transition)
-    self._transition_lengths.append(0)
+    self._trajectories.append(new_transition)
+    self._trajectory_lengths.append(0)
     for _ in range(self._stack_size - 1):
       # Child classes can rely on the padding transitions being filled with
       # zeros. This is useful when there is a priority argument.
       self._add_zero_transition()
-    return self._get_last_transition()
+    return self._get_last_trajectory()
 
   def get_add_args_signature(self):
     """The signature of the add function.
@@ -223,7 +232,7 @@ class OutOfGraphReplayBuffer(object):
   def _maintain_buffer_size(self):
     """Removes first transition from buffer if buffer is full."""
     if self.is_full():
-      self._transitions.pop(0)
+      self._trajectories.pop(0)
       self.add_count -= self._lengths.pop(0)
 
   @lock_lib.locked_method()
@@ -248,31 +257,31 @@ class OutOfGraphReplayBuffer(object):
         extra_storage_types.
     """
     self._check_add_types(observation, action, reward, terminal, *args)
-    transition_index = self._get_last_transition()
-    self._add(transition_index, observation, action, reward, terminal, *args)
+    trajectory_index = self._get_last_trajectory()
+    self._add(trajectory_index, observation, action, reward, terminal, *args)
 
-  def _add(self, transition_index, *args):
+  def _add(self, trajectory_index, *args):
     """Internal add method to add to the storage arrays.
 
     Args:
-      transition_index: int, index of the transition to add to.
+      trajectory_index: int, index of the trajectory to add to.
       *args: All the elements in a transition.
 
     Raises:
       ValueError: If `transition_index` is not in the range
-        [0, len(self._transitions)].
+        [0, len(self._trajectories)].
     """
-    if not (0 <= transition_index < len(self._transitions)):
+    if not (0 <= trajectory_index < len(self._trajectories)):
       raise ValueError(
-          '`transition_index` must be in the '
+          '`trajectory_index` must be in the '
           'range [0, {}[. Given {} instead.'.format(
-              len(self._transitions), transition_index))
+              len(self._trajectories), trajectory_index))
     arg_names = [e.name for e in self.get_add_args_signature()]
     for arg_name, arg in zip(arg_names, args):
-      self._transitions[transition_index][arg_name].append(arg)
+      self._trajectories[trajectory_index][arg_name].append(arg)
 
     self.add_count += 1
-    self._lengths[transition_index] += 1
+    self._lengths[trajectory_index] += 1
     self._maintain_buffer_size()
 
   def _check_add_types(self, *args):
@@ -380,44 +389,20 @@ class OutOfGraphReplayBuffer(object):
   def sample_index_batch(self, batch_size):
     """Returns a batch of valid indices sampled uniformly.
 
-    Args:
+     Args:
       batch_size: int, number of indices returned.
 
-    Returns:
-      list of ints, a batch of valid indices sampled uniformly.
-
-    Raises:
-      RuntimeError: If the batch was not constructed after maximum number of
-        tries.
+     Returns:
+      List[(int, int)], a batch of valid indices sampled uniformly.
     """
-    if self.is_full():
-      # add_count >= self._replay_capacity > self._stack_size
-      min_id = self.cursor() - self._replay_capacity + self._stack_size - 1
-      max_id = self.cursor() - self._update_horizon
-    else:
-      # add_count < self._replay_capacity
-      min_id = self._stack_size - 1
-      max_id = self.cursor() - self._update_horizon
-      if max_id <= min_id:
-        raise RuntimeError('Cannot sample a batch with fewer than stack size '
-                           '({}) + update_horizon ({}) transitions.'.
-                           format(self._stack_size, self._update_horizon))
-
-    indices = []
-    attempt_count = 0
-    while (len(indices) < batch_size and
-           attempt_count < self._max_sample_attempts):
-      attempt_count += 1
-      index = np.random.randint(min_id, max_id) % self._replay_capacity
-      if self.is_valid_transition(index):
-        indices.append(index)
-    if len(indices) != batch_size:
-      raise RuntimeError(
-          'Max sample attempts: Tried {} times but only sampled {}'
-          ' valid indices. Batch size is {}'.
-          format(self._max_sample_attempts, len(indices), batch_size))
-
-    return indices
+    lengths = np.array(self._trajectory_lengths)
+    trajectory_indices = np.random.choice(
+        len(lengths), size=batch_size, p=lengths/lengths.sum())
+    transition_indices = []
+    for length in lengths[trajectory_indices]:
+      transition_indices.append(
+          np.random.randint(self._stack_size - 1, length))
+    return zip(trajectory_indices, transition_indices)
 
   @lock_lib.locked_method()
   def sample_transition_batch(self, batch_size=None, indices=None):
@@ -439,8 +424,8 @@ class OutOfGraphReplayBuffer(object):
     Args:
       batch_size: int, number of transitions returned. If None, the default
         batch_size will be used.
-      indices: None or list of ints, the indices of every transition in the
-        batch. If None, sample the indices uniformly.
+      indices: None or List[(int, int)], the indices of every trajectory and
+        transition in the batch. If None, sample the indices uniformly.
 
     Returns:
       transition_batch: tuple of np.arrays with the shape and type as in
@@ -457,7 +442,11 @@ class OutOfGraphReplayBuffer(object):
 
     transition_elements = self.get_transition_elements(batch_size)
     batch_arrays = self._create_batch_arrays(batch_size)
-    for batch_element, state_index in enumerate(indices):
+    for batch_element, index in enumerate(indices):
+      trajectory_index, state_index = index
+      trajectory = self._trajectories[trajectory_index]
+
+
       trajectory_indices = [(state_index + j) % self._replay_capacity
                             for j in range(self._update_horizon)]
       trajectory_terminals = self._store['terminal'][trajectory_indices]
