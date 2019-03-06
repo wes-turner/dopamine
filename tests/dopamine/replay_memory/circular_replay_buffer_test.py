@@ -20,11 +20,11 @@ from __future__ import print_function
 import gzip
 import os
 import shutil
-import mock
 
 from absl import flags
 from dopamine.replay_memory import circular_replay_buffer
 from dopamine.utils import test_utils
+import mock
 import numpy as np
 import tensorflow as tf
 
@@ -752,6 +752,7 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     memory.add(zeros, 0, 0, 1)
     # Check that terminal transition is added along with initial transition.
     self.assertEqual(memory.add_count, 3)
+
 
 class WrappedReplayBufferTest(tf.test.TestCase):
 
