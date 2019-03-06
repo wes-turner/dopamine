@@ -29,6 +29,7 @@ import gzip
 import math
 import os
 import pickle
+import threading
 
 from dopamine.utils import lock as lock_lib
 import numpy as np
@@ -202,8 +203,9 @@ class OutOfGraphReplayBuffer(object):
       array_shape = [self._replay_capacity] + list(storage_element.shape)
       self._store[storage_element.name] = np.empty(
           array_shape, dtype=storage_element.type)
-    self._trajectories = []
-    self._trajectory_lengths = []
+    self._heads = {}
+    self._trajectories = {}
+    self._trajectory_lengths = {}
 
   def _get_current_trajectory(self):
     """Returns ongoing trajectory to write to and creates a new one if needed.
@@ -211,15 +213,11 @@ class OutOfGraphReplayBuffer(object):
     Returns:
       int, the index of the last trajectory to write to.
     """
-    if self._trajectories:
-      index = len(self._trajectories) - 1
-      transition = self._trajectories[index]
-      return index
-
-    new_transition = []
-    self._trajectories.append(new_transition)
-    self._trajectory_lengths.append(0)
-    return self._get_current_trajectory()
+    head_id = threading.current_thread().ident
+    if not head_id in self._trajectories:
+      self._trajectories[head_id] = []
+      self._trajectory_lengths[head_id] = 0
+    return head_id
 
   def get_add_args_signature(self):
     """The signature of the add function.
@@ -308,11 +306,6 @@ class OutOfGraphReplayBuffer(object):
       ValueError: If `transition_index` is not in the range
         [0, len(self._trajectories)].
     """
-    if not (0 <= trajectory_index < len(self._trajectories)):
-      raise ValueError(
-          '`trajectory_index` must be in the '
-          'range [0, {}[. Given {} instead.'.format(
-              len(self._trajectories), trajectory_index))
     trajectory = self._trajectories[trajectory_index]
     trajectory.append(
         tuple([observation, action, reward, terminal] + list(args)))

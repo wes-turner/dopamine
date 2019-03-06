@@ -694,7 +694,7 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     self.assertEqual(memory.cursor(), 0)
     self.assertEqual(memory.add_count, 0)
     self.assertEqual(len(memory._trajectories), 1)
-    self.assertEqual(memory._trajectory_lengths[0], 1)
+    self.assertEqual(memory._trajectory_lengths.values()[0], 1)
 
   def testAddTerminalNodeToTrajectoryBuffer(self):
     memory = circular_replay_buffer.OutOfGraphReplayBuffer(
