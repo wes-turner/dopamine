@@ -201,18 +201,13 @@ class OutOfGraphReplayBuffer(object):
     self._trajectories = []
     self._trajectory_lengths = []
 
-  def _is_terminal(self, trajectory):
-    return trajectory['terminal'][-1]
-
   def _get_last_trajectory(self):
     if self._trajectories:
       index = len(self._trajectories) - 1
       transition = self._trajectories[index]
-      if transition and self._is_terminal(transition):
-        raise ValueError('Trjectory should not be terminal.')
       return index
 
-    new_transition = collections.defaultdict(lambda: [])
+    new_transition = []
     self._trajectories.append(new_transition)
     self._trajectory_lengths.append(0)
     return self._get_last_trajectory()
@@ -283,11 +278,17 @@ class OutOfGraphReplayBuffer(object):
     self._add_to_trajectory(
         trajectory_index, observation, action, reward, terminal, *args)
 
-  def _add_to_trajectory(self, trajectory_index, *args):
+  def _add_to_trajectory(self, trajectory_index, observation, action, reward,
+                         terminal, *args):
     """Internal add method to add to the storage arrays.
 
     Args:
       trajectory_index: int, index of the trajectory to add to.
+      observation: np.array with shape observation_shape.
+      action: int, the action in the transition.
+      reward: float, the reward received in the transition.
+      terminal: A uint8 acting as a boolean indicating whether the transition
+                was terminal (1) or not (0).
       *args: All the elements in a transition.
 
     Raises:
@@ -299,32 +300,26 @@ class OutOfGraphReplayBuffer(object):
           '`trajectory_index` must be in the '
           'range [0, {}[. Given {} instead.'.format(
               len(self._trajectories), trajectory_index))
-    arg_names = [e.name for e in self.get_add_args_signature()]
     trajectory = self._trajectories[trajectory_index]
-    for arg_name, arg in zip(arg_names, args):
-      trajectory[arg_name].append(arg)
+    trajectory.append(
+        tuple([observation, action, reward, terminal] + list(args)))
 
     self._trajectory_lengths[trajectory_index] += 1
 
-    if self._is_terminal(trajectory) or (self._max_trajectory_buffer and (
+    if terminal or (self._max_trajectory_buffer and (
         len(trajectory) >= self._max_trajectory_buffer)):
-      self._add_trajectory_to_buffer(trajectory_index, *args)
+      self._add_trajectory_to_buffer(trajectory_index)
 
-  def _add_trajectory_to_buffer(self, trajectory_index, *args):
+  def _add_trajectory_to_buffer(self, trajectory_index):
     if self.is_empty() or self._store['terminal'][self.cursor() - 1] == 1:
       for _ in range(self._stack_size - 1):
         # Child classes can rely on the padding transitions being filled with
         # zeros. This is useful when there is a priority argument.
         self._add_zero_transition()
     trajectory = self._trajectories.pop(trajectory_index)
-    length = self._trajectory_lengths.pop(trajectory_index)
-    for i in range(length):
-      self._add(
-          trajectory['observation'][i],
-          trajectory['action'][i],
-          trajectory['reward'][i],
-          trajectory['terminal'][i],
-          *args)
+    self._trajectory_lengths.pop(trajectory_index)
+    for step_args in trajectory:
+      self._add(*step_args)
 
   def _add(self, *args):
     """Internal add method to add to the storage arrays.
