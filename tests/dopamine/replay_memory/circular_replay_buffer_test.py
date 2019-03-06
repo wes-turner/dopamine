@@ -20,10 +20,10 @@ from __future__ import print_function
 import gzip
 import os
 import shutil
-import mock
 
 from absl import flags
 from dopamine.replay_memory import circular_replay_buffer
+import mock
 import numpy as np
 import tensorflow as tf
 
