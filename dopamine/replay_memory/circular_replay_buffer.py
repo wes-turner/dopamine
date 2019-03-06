@@ -54,6 +54,7 @@ MAX_SAMPLE_ATTEMPTS = 1000
 
 def invalid_range(cursor, replay_capacity, stack_size, update_horizon):
   """Returns a array with the indices of cursor-related invalid transitions.
+
   There are update_horizon + stack_size invalid indices:
     - The update_horizon indices before the cursor, because we do not have a
       valid N-step transition (including the next state).
@@ -61,7 +62,9 @@ def invalid_range(cursor, replay_capacity, stack_size, update_horizon):
   If N = update_horizon, K = stack_size, and the cursor is at c, invalid
   indices are:
     c - N, c - N + 1, ..., c, c + 1, ..., c + K - 1.
+
   It handles special cases in a circular buffer in the beginning and the end.
+
   Args:
     cursor: int, the position of the cursor.
     replay_capacity: int, the size of the replay memory.
@@ -371,6 +374,38 @@ class OutOfGraphReplayBuffer(object):
     """Is the Replay Buffer full?"""
     return self.add_count >= self._replay_capacity
 
+  def cursor(self):
+    """Index to the location where the next transition will be written."""
+    return self.add_count % self._replay_capacity
+
+  def get_range(self, array, start_index, end_index):
+    """Returns the range of array at the index handling wraparound if necessary.
+     Args:
+      array: np.array, the array to get the stack from.
+      start_index: int, index to the start of the range to be returned. Range
+        will wraparound if start_index is smaller than 0.
+      end_index: int, exclusive end index. Range will wraparound if end_index
+        exceeds replay_capacity.
+     Returns:
+      np.array, with shape [end_index - start_index, array.shape[1:]].
+    """
+    assert end_index > start_index, 'end_index must be larger than start_index'
+    assert end_index >= 0
+    assert start_index < self._replay_capacity
+    if not self.is_full():
+      assert end_index <= self.cursor(), (
+          'Index {} has not been added.'.format(start_index))
+
+     # Fast slice read when there is no wraparound.
+    if start_index % self._replay_capacity < end_index % self._replay_capacity:
+      return_array = array[start_index:end_index, ...]
+    # Slow list read.
+    else:
+      indices = [(start_index + i) % self._replay_capacity
+                 for i in range(end_index - start_index)]
+      return_array = array[indices, ...]
+    return return_array
+
   def get_observation_stack(self, index):
     return self._get_element_stack(index, 'observation')
 
@@ -439,12 +474,15 @@ class OutOfGraphReplayBuffer(object):
       batch_arrays.append(np.empty(element.shape, dtype=element.type))
     return tuple(batch_arrays)
 
-def sample_index_batch(self, batch_size):
+  def sample_index_batch(self, batch_size):
     """Returns a batch of valid indices sampled uniformly.
+
     Args:
       batch_size: int, number of indices returned.
+
     Returns:
       list of ints, a batch of valid indices sampled uniformly.
+
     Raises:
       RuntimeError: If the batch was not constructed after maximum number of
         tries.
@@ -478,26 +516,33 @@ def sample_index_batch(self, batch_size):
 
     return indices
 
+  @lock_lib.locked_method()
   def sample_transition_batch(self, batch_size=None, indices=None):
     """Returns a batch of transitions (including any extra contents).
+
     If get_transition_elements has been overridden and defines elements not
     stored in self._store, an empty array will be returned and it will be
     left to the child class to fill it. For example, for the child class
     OutOfGraphPrioritizedReplayBuffer, the contents of the
     sampling_probabilities are stored separately in a sum tree.
+
     When the transition is terminal next_state_batch has undefined contents.
+
     NOTE: This transition contains the indices of the sampled elements. These
     are only valid during the call to sample_transition_batch, i.e. they may
     be used by subclasses of this replay buffer but may point to different data
     as soon as sampling is done.
+
     Args:
       batch_size: int, number of transitions returned. If None, the default
         batch_size will be used.
       indices: None or list of ints, the indices of every transition in the
         batch. If None, sample the indices uniformly.
+
     Returns:
       transition_batch: tuple of np.arrays with the shape and type as in
         get_transition_elements().
+
     Raises:
       ValueError: If an element to be sampled is missing from the replay buffer.
     """
