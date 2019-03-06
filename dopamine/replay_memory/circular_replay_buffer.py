@@ -31,10 +31,10 @@ import os
 import pickle
 
 from dopamine.utils import lock as lock_lib
+import gin.tf
 import numpy as np
 import tensorflow as tf
 
-import gin.tf
 
 # Defines a type describing part of the tuple returned by the replay
 # memory. Each element of the tuple is a tensor of shape [batch, ...] where
@@ -213,7 +213,6 @@ class OutOfGraphReplayBuffer(object):
     """
     if self._trajectories:
       index = len(self._trajectories) - 1
-      transition = self._trajectories[index]
       return index
 
     new_transition = []
@@ -308,7 +307,7 @@ class OutOfGraphReplayBuffer(object):
       ValueError: If `transition_index` is not in the range
         [0, len(self._trajectories)].
     """
-    if not (0 <= trajectory_index < len(self._trajectories)):
+    if not 0 <= trajectory_index < len(self._trajectories):
       raise ValueError(
           '`trajectory_index` must be in the '
           'range [0, {}[. Given {} instead.'.format(
@@ -341,6 +340,7 @@ class OutOfGraphReplayBuffer(object):
 
   def _add(self, *args):
     """Internal add method to add to the storage arrays.
+
     Args:
       *args: All the elements in a transition.
     """
