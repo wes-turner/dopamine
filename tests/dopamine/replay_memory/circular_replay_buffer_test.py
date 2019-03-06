@@ -24,6 +24,7 @@ import mock
 
 from absl import flags
 from dopamine.replay_memory import circular_replay_buffer
+from dopamine.utils import test_utils
 import numpy as np
 import tensorflow as tf
 
@@ -730,6 +731,27 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     self.assertEqual(len(memory._trajectories), 0)
     self.assertEqual(len(memory._trajectory_lengths), 0)
 
+  def testAddMultipleThreads(self):
+    memory = circular_replay_buffer.OutOfGraphReplayBuffer(
+        observation_shape=OBSERVATION_SHAPE,
+        stack_size=1,
+        replay_capacity=5,
+        batch_size=BATCH_SIZE,
+        max_trajectory_buffer=None)
+    self.assertEqual(memory.cursor(), 0)
+    self.assertEqual(len(memory._trajectories), 0)
+    zeros = np.zeros(OBSERVATION_SHAPE)
+    # Add transition in main thread.
+    memory.add(zeros, 0, 0, 0)
+    # Add a terminal transition in separate thread.
+    with test_utils.mock_thread('other-thread'):
+      memory.add(zeros, 0, 0, 1)
+    # Check that terminal transition is added by itself.
+    self.assertEqual(memory.add_count, 1)
+    # Add terminal transition in main thread.
+    memory.add(zeros, 0, 0, 1)
+    # Check that terminal transition is added along with initial transition.
+    self.assertEqual(memory.add_count, 3)
 
 class WrappedReplayBufferTest(tf.test.TestCase):
 
