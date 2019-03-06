@@ -32,10 +32,10 @@ import pickle
 import threading
 
 from dopamine.utils import lock as lock_lib
+import gin.tf
 import numpy as np
 import tensorflow as tf
 
-import gin.tf
 
 # Defines a type describing part of the tuple returned by the replay
 # memory. Each element of the tuple is a tensor of shape [batch, ...] where
@@ -214,7 +214,7 @@ class OutOfGraphReplayBuffer(object):
       int, the index of the last trajectory to write to.
     """
     head_id = threading.current_thread().ident
-    if not head_id in self._trajectories:
+    if head_id not in self._trajectories:
       self._trajectories[head_id] = []
       self._trajectory_lengths[head_id] = 0
     return head_id
@@ -330,6 +330,7 @@ class OutOfGraphReplayBuffer(object):
 
   def _add(self, *args):
     """Internal add method to add to the storage arrays.
+
     Args:
       *args: All the elements in a transition.
     """
