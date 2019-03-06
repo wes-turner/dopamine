@@ -205,8 +205,8 @@ class OutOfGraphReplayBuffer(object):
     self._trajectories = []
     self._trajectory_lengths = []
 
-  def _get_last_trajectory(self):
-    """Returns last trajectory to write to and creates a new one if needed.
+  def _get_current_trajectory(self):
+    """Returns ongoing trajectory to write to and creates a new one if needed.
 
     Returns:
       int, the index of the last trajectory to write to.
@@ -219,7 +219,7 @@ class OutOfGraphReplayBuffer(object):
     new_transition = []
     self._trajectories.append(new_transition)
     self._trajectory_lengths.append(0)
-    return self._get_last_trajectory()
+    return self._get_current_trajectory()
 
   def get_add_args_signature(self):
     """The signature of the add function.
@@ -283,12 +283,12 @@ class OutOfGraphReplayBuffer(object):
         extra_storage_types.
     """
     self._check_add_types(observation, action, reward, terminal, *args)
-    trajectory_index = self._get_last_trajectory()
-    self._add_to_trajectory(
+    trajectory_index = self._get_current_trajectory()
+    self._add_to_trajectory_buffer(
         trajectory_index, observation, action, reward, terminal, *args)
 
-  def _add_to_trajectory(self, trajectory_index, observation, action, reward,
-                         terminal, *args):
+  def _add_to_trajectory_buffer(
+      self, trajectory_index, observation, action, reward, terminal, *args):
     """Adds a transition to the trajectory buffer.
 
     Transitions are added to a trajectory until a terminal step is encountered
@@ -321,7 +321,7 @@ class OutOfGraphReplayBuffer(object):
 
     if terminal or (self._max_trajectory_buffer and (
         len(trajectory) >= self._max_trajectory_buffer)):
-      self._add_trajectory_to_buffer(trajectory_index)
+      self._add_trajectory_to_memory(trajectory_index)
 
   def _add_trajectory_to_memory(self, trajectory_index):
     """Add a stored trajectory buffer to the replay memory.
