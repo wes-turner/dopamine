@@ -380,12 +380,14 @@ class OutOfGraphReplayBuffer(object):
 
   def get_range(self, array, start_index, end_index):
     """Returns the range of array at the index handling wraparound if necessary.
+
      Args:
       array: np.array, the array to get the stack from.
       start_index: int, index to the start of the range to be returned. Range
         will wraparound if start_index is smaller than 0.
       end_index: int, exclusive end index. Range will wraparound if end_index
         exceeds replay_capacity.
+
      Returns:
       np.array, with shape [end_index - start_index, array.shape[1:]].
     """
@@ -396,7 +398,7 @@ class OutOfGraphReplayBuffer(object):
       assert end_index <= self.cursor(), (
           'Index {} has not been added.'.format(start_index))
 
-     # Fast slice read when there is no wraparound.
+    # Fast slice read when there is no wraparound.
     if start_index % self._replay_capacity < end_index % self._replay_capacity:
       return_array = array[start_index:end_index, ...]
     # Slow list read.
