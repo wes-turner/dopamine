@@ -136,10 +136,14 @@ class OutOfGraphReplayBuffer(object):
       reward_dtype: np.dtype, type of elements in the reward.
       lock: lock object to use for protection against concurrent access. If
         `None` then locking is disabled.
-      max_trajectory_buffer: int, with the maximum size of the trajectory
-        contained in the buffer before the trajectory is added to the memory. If
-        `None` then no maximum is applied and the buffer keeps filling until the
-        a terminal node is encountered.
+      max_trajectory_buffer: int, the maximum size of the trajectory contained
+        in the buffer before the trajectory is added to the memory. If `None`
+        then no maximum is applied and the buffer keeps filling until a terminal
+        node is added. In other words this specifies how many steps are added at
+        a time to the memory. It ensures that trajectories are stored
+        continuously in memory when several threads are writing simultaneously (
+        e.g. have `AAABBB` instead of `ABABAB` when two trajectories A and B are
+        being written).
 
     Raises:
       ValueError: If replay_capacity is too small to hold at least one
@@ -202,6 +206,11 @@ class OutOfGraphReplayBuffer(object):
     self._trajectory_lengths = []
 
   def _get_last_trajectory(self):
+    """Returns last trajectory to write to and creates a new one if needed.
+
+    Returns:
+      int, the index of the last trajectory to write to.
+    """
     if self._trajectories:
       index = len(self._trajectories) - 1
       transition = self._trajectories[index]
@@ -280,7 +289,11 @@ class OutOfGraphReplayBuffer(object):
 
   def _add_to_trajectory(self, trajectory_index, observation, action, reward,
                          terminal, *args):
-    """Internal add method to add to the storage arrays.
+    """Adds a transition to the trajectory buffer.
+
+    Transitions are added to a trajectory until a terminal step is encountered
+    or the trajectory size reaches `max_trajectory_buffer`, in which case the
+    trajectory stored to the buffer is added to the memory and emptied.
 
     Args:
       trajectory_index: int, index of the trajectory to add to.
@@ -310,7 +323,12 @@ class OutOfGraphReplayBuffer(object):
         len(trajectory) >= self._max_trajectory_buffer)):
       self._add_trajectory_to_buffer(trajectory_index)
 
-  def _add_trajectory_to_buffer(self, trajectory_index):
+  def _add_trajectory_to_memory(self, trajectory_index):
+    """Add a stored trajectory buffer to the replay memory.
+
+    Args:
+      trajectory_index: int, the index of the trajectory to add to the memory.
+    """
     if self.is_empty() or self._store['terminal'][self.cursor() - 1] == 1:
       for _ in range(self._stack_size - 1):
         # Child classes can rely on the padding transitions being filled with
