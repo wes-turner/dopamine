@@ -301,10 +301,6 @@ class OutOfGraphReplayBuffer(object):
       terminal: A uint8 acting as a boolean indicating whether the transition
                 was terminal (1) or not (0).
       *args: All the elements in a transition.
-
-    Raises:
-      ValueError: If `transition_index` is not in the range
-        [0, len(self._trajectories)].
     """
     trajectory = self._trajectories[trajectory_index]
     trajectory.append(
