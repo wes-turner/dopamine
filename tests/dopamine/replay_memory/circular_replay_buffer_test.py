@@ -680,6 +680,38 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     memory = _create_dummy_memory(lock='lock-name')
     self.assertEqual(memory._lock, 'lock-name')
 
+  def testAddNodeToTrajectoryBuffer(self):
+    memory = circular_replay_buffer.OutOfGraphReplayBuffer(
+        observation_shape=OBSERVATION_SHAPE,
+        stack_size=STACK_SIZE,
+        replay_capacity=5,
+        batch_size=BATCH_SIZE,
+        max_trajectory_buffer=None)
+    self.assertEqual(memory.cursor(), 0)
+    self.assertEqual(len(memory._trajectories), 0)
+    zeros = np.zeros(OBSERVATION_SHAPE)
+    memory.add(zeros, 0, 0, 0)
+    self.assertEqual(memory.cursor(), 0)
+    self.assertEqual(memory.add_count, 0)
+    self.assertEqual(len(memory._trajectories), 1)
+    self.assertEqual(memory._trajectory_lengths[0], 1)
+
+  def testAddTerminalNodeToTrajectoryBuffer(self):
+    memory = circular_replay_buffer.OutOfGraphReplayBuffer(
+        observation_shape=OBSERVATION_SHAPE,
+        stack_size=STACK_SIZE,
+        replay_capacity=5,
+        batch_size=BATCH_SIZE,
+        max_trajectory_buffer=None)
+    self.assertEqual(memory.cursor(), 0)
+    self.assertEqual(len(memory._trajectories), 0)
+    zeros = np.zeros(OBSERVATION_SHAPE)
+    memory.add(zeros, 0, 0, 1)
+    self.assertEqual(memory.cursor(), STACK_SIZE)
+    self.assertEqual(memory.add_count, STACK_SIZE)
+    self.assertEqual(len(memory._trajectories), 0)
+    self.assertEqual(len(memory._trajectory_lengths), 0)
+
 
 class WrappedReplayBufferTest(tf.test.TestCase):
 
