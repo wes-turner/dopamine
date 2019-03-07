@@ -102,17 +102,14 @@ class Runner(object):
 
     self._environment = create_environment_fn()
     # Set up a session and initialize variables.
-    self._initialize_session()
+    self._sess = tf.Session('',	    self._initialize_session()
+                            config=tf.ConfigProto(allow_soft_placement=True))
     self._agent = create_agent_fn(self._sess, self._environment,
                                   summary_writer=self._summary_writer)
     self._summary_writer.add_graph(graph=tf.get_default_graph())
     self._sess.run(tf.global_variables_initializer())
 
     self._initialize_checkpointer_and_maybe_resume(checkpoint_file_prefix)
-
-  def _initialize_session(self):
-    self._sess = tf.Session('',
-                            config=tf.ConfigProto(allow_soft_placement=True))
 
   def _create_directories(self):
     """Create necessary sub-directories."""
@@ -166,7 +163,7 @@ class Runner(object):
       action: int, the initial action chosen by the agent.
     """
     initial_observation = self._environment.reset()
-    return self._agent_begin_episode(initial_observation)
+    return self._agent.begin_episode(initial_observation)
 
   def _run_one_step(self, action):
     """Executes a single step in the environment.
@@ -218,20 +215,14 @@ class Runner(object):
       elif is_terminal:
         # If we lose a life but the episode is not over, signal an artificial
         # end of episode to the agent.
-        self._agent_end_episode(reward)
-        action = self._agent_begin_episode(observation)
+        self._agent.end_episode(reward)
+        action = self._agent.begin_episode(observation)
       else:
-        action = self._agent_step(reward, observation)
+        action = self._agent.step(reward, observation)
 
     self._end_episode(reward)
 
     return step_number, total_reward
-
-  def _agent_begin_episode(self, observation):
-    return self._agent.begin_episode(observation)
-
-  def _agent_step(self, reward, observation):
-    return self._agent.step(reward, observation)
 
   def _run_one_phase(self, min_steps, statistics, run_mode_str):
     """Runs the agent/environment loop until a desired number of steps.
@@ -405,7 +396,11 @@ class Runner(object):
       tf.logging.warning('num_iterations (%d) < start_iteration(%d)',
                          self._num_iterations, self._start_iteration)
       return
-    self._run_experiment_loop()
+
+    for iteration in range(self._start_iteration, self._num_iterations):
+      statistics = self._run_one_iteration(iteration)
+      self._log_experiment(iteration, statistics)
+      self._checkpoint_experiment(iteration)
 
 
 @gin.configurable
