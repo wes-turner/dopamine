@@ -18,4 +18,10 @@ from dopamine.discrete_domains.run_experiment import run_experiment
 
 
 class AsyncRunner(run_experiment.Runner):
-  pass
+  """Defines a train runner for asynchronous training."""
+
+  def _initialize_session(self):
+    """Creates a tf.Session that supports GPU usage in multiple threads."""
+    config = tf.ConfigProto(allow_soft_placement=True)
+    config.gpu_options.allow_growth = True
+    self._sess = tf.Session('', config=config)
