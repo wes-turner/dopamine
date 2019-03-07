@@ -84,7 +84,7 @@ class TrainRunnerIntegrationTest(tf.test.TestCase):
     shutil.rmtree(FLAGS.base_dir)
 
   def testIntegrationDqnAsync(self):
-    """Test the DQN agent."""
+    """Test the DQN agent with asynchronous training."""
     tf.logging.info('####### Training the DQN agent asynchronously #####')
     tf.logging.info('####### DQN base_dir: {}'.format(FLAGS.base_dir))
     self.quickDqnAsyncFlags()
