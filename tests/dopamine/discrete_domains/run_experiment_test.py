@@ -21,6 +21,8 @@ from __future__ import print_function
 import os
 import shutil
 
+
+
 from absl import flags
 from dopamine.agents.dqn import dqn_agent
 from dopamine.agents.implicit_quantile import implicit_quantile_agent
@@ -28,10 +30,10 @@ from dopamine.agents.rainbow import rainbow_agent
 from dopamine.discrete_domains import checkpointer
 from dopamine.discrete_domains import logger
 from dopamine.discrete_domains import run_experiment
-import gin.tf
 import mock
 import tensorflow as tf
 
+import gin.tf
 
 FLAGS = flags.FLAGS
 
@@ -173,17 +175,6 @@ class RunExperimentTest(tf.test.TestCase):
     base_dir = '/tmp'
     run_experiment.create_runner(base_dir,
                                  schedule='continuous_train')
-    self.assertEqual(1, mock_runner_constructor.call_count)
-    mock_args, _ = mock_runner_constructor.call_args
-    self.assertEqual(base_dir, mock_args[0])
-    self.assertEqual(mock_create_agent, mock_args[1])
-
-  @mock.patch.object(run_experiment, 'AsyncRunner')
-  @mock.patch.object(run_experiment, 'create_agent')
-  def testCreateAsyncRunner(self, mock_create_agent, mock_runner_constructor):
-    base_dir = '/tmp'
-    run_experiment.create_runner(base_dir,
-                                 schedule='async_train')
     self.assertEqual(1, mock_runner_constructor.call_count)
     mock_args, _ = mock_runner_constructor.call_args
     self.assertEqual(base_dir, mock_args[0])
