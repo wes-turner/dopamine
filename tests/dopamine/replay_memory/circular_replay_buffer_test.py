@@ -689,13 +689,12 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
         batch_size=BATCH_SIZE,
         max_trajectory_buffer=None)
     self.assertEqual(memory.cursor(), 0)
-    self.assertEqual(len(memory._trajectories), 0)
+    self.assertEqual(len(memory._trajectory), 0)
     zeros = np.zeros(OBSERVATION_SHAPE)
     memory.add(zeros, 0, 0, 0)
     self.assertEqual(memory.cursor(), 0)
     self.assertEqual(memory.add_count, 0)
-    self.assertEqual(len(memory._trajectories), 1)
-    self.assertEqual(memory._trajectory_lengths.values()[0], 1)
+    self.assertEqual(len(memory._trajectory), 1)
 
   def testAddTerminalNodeToTrajectoryBuffer(self):
     memory = circular_replay_buffer.OutOfGraphReplayBuffer(
@@ -705,13 +704,12 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
         batch_size=BATCH_SIZE,
         max_trajectory_buffer=None)
     self.assertEqual(memory.cursor(), 0)
-    self.assertEqual(len(memory._trajectories), 0)
+    self.assertEqual(len(memory._trajectory), 0)
     zeros = np.zeros(OBSERVATION_SHAPE)
     memory.add(zeros, 0, 0, 1)
     self.assertEqual(memory.cursor(), STACK_SIZE)
     self.assertEqual(memory.add_count, STACK_SIZE)
-    self.assertEqual(len(memory._trajectories), 0)
-    self.assertEqual(len(memory._trajectory_lengths), 0)
+    self.assertEqual(len(memory._trajectory), 0)
 
   def testTrajectoryBufferSize(self):
     memory = circular_replay_buffer.OutOfGraphReplayBuffer(
@@ -721,15 +719,14 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
         batch_size=BATCH_SIZE,
         max_trajectory_buffer=11)
     self.assertEqual(memory.cursor(), 0)
-    self.assertEqual(len(memory._trajectories), 0)
+    self.assertEqual(len(memory._trajectory), 0)
     zeros = np.zeros(OBSERVATION_SHAPE)
     for _ in range(11):
       memory.add(zeros, 0, 0, 0)
     expected_length = STACK_SIZE + 10
     self.assertEqual(memory.cursor(), expected_length)
     self.assertEqual(memory.add_count, expected_length)
-    self.assertEqual(len(memory._trajectories), 0)
-    self.assertEqual(len(memory._trajectory_lengths), 0)
+    self.assertEqual(len(memory._trajectory), 0)
 
   def testAddMultipleThreads(self):
     memory = circular_replay_buffer.OutOfGraphReplayBuffer(
@@ -739,7 +736,7 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
         batch_size=BATCH_SIZE,
         max_trajectory_buffer=None)
     self.assertEqual(memory.cursor(), 0)
-    self.assertEqual(len(memory._trajectories), 0)
+    self.assertEqual(len(memory._trajectory), 0)
     zeros = np.zeros(OBSERVATION_SHAPE)
     # Add transition in main thread.
     memory.add(zeros, 0, 0, 0)

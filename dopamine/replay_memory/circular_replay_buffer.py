@@ -29,9 +29,9 @@ import gzip
 import math
 import os
 import pickle
-import threading
 
 from dopamine.utils import lock as lock_lib
+from dopamine.utils import threading_utils
 import gin.tf
 import numpy as np
 import tensorflow as tf
@@ -80,6 +80,7 @@ def invalid_range(cursor, replay_capacity, stack_size, update_horizon):
        for i in range(stack_size + update_horizon)])
 
 
+@threading_utils.local_attributes(['_trajectory'])
 class OutOfGraphReplayBuffer(object):
   """A simple out-of-graph Replay Buffer.
 
@@ -194,6 +195,7 @@ class OutOfGraphReplayBuffer(object):
     self._max_trajectory_buffer = max_trajectory_buffer
 
     lock_lib.initialize_lock(self, lock=lock)
+    threading_utils.initialize_local_attributes(self, _trajectory=lambda: [])
 
   def _create_storage(self):
     """Creates the numpy arrays used to store transitions.
@@ -203,21 +205,6 @@ class OutOfGraphReplayBuffer(object):
       array_shape = [self._replay_capacity] + list(storage_element.shape)
       self._store[storage_element.name] = np.empty(
           array_shape, dtype=storage_element.type)
-    self._heads = {}
-    self._trajectories = {}
-    self._trajectory_lengths = {}
-
-  def _get_current_trajectory(self):
-    """Returns ongoing trajectory to write to and creates a new one if needed.
-
-    Returns:
-      int, the index of the last trajectory to write to.
-    """
-    head_id = threading.current_thread().ident
-    if head_id not in self._trajectories:
-      self._trajectories[head_id] = []
-      self._trajectory_lengths[head_id] = 0
-    return head_id
 
   def get_add_args_signature(self):
     """The signature of the add function.
@@ -281,12 +268,11 @@ class OutOfGraphReplayBuffer(object):
         extra_storage_types.
     """
     self._check_add_types(observation, action, reward, terminal, *args)
-    trajectory_index = self._get_current_trajectory()
     self._add_to_trajectory_buffer(
-        trajectory_index, observation, action, reward, terminal, *args)
+        observation, action, reward, terminal, *args)
 
   def _add_to_trajectory_buffer(
-      self, trajectory_index, observation, action, reward, terminal, *args):
+      self, observation, action, reward, terminal, *args):
     """Adds a transition to the trajectory buffer.
 
     Transitions are added to a trajectory until a terminal step is encountered
@@ -294,7 +280,6 @@ class OutOfGraphReplayBuffer(object):
     trajectory stored to the buffer is added to the memory and emptied.
 
     Args:
-      trajectory_index: int, index of the trajectory to add to.
       observation: np.array with shape observation_shape.
       action: int, the action in the transition.
       reward: float, the reward received in the transition.
@@ -302,31 +287,23 @@ class OutOfGraphReplayBuffer(object):
                 was terminal (1) or not (0).
       *args: All the elements in a transition.
     """
-    trajectory = self._trajectories[trajectory_index]
-    trajectory.append(
+    self._trajectory.append(
         tuple([observation, action, reward, terminal] + list(args)))
 
-    self._trajectory_lengths[trajectory_index] += 1
-
     if terminal or (self._max_trajectory_buffer and (
-        len(trajectory) >= self._max_trajectory_buffer)):
-      self._add_trajectory_to_memory(trajectory_index)
+        len(self._trajectory) >= self._max_trajectory_buffer)):
+      self._add_trajectory_to_memory()
 
-  def _add_trajectory_to_memory(self, trajectory_index):
-    """Add a stored trajectory buffer to the replay memory.
-
-    Args:
-      trajectory_index: int, the index of the trajectory to add to the memory.
-    """
+  def _add_trajectory_to_memory(self):
+    """Add a stored trajectory buffer to the replay memory."""
     if self.is_empty() or self._store['terminal'][self.cursor() - 1] == 1:
       for _ in range(self._stack_size - 1):
         # Child classes can rely on the padding transitions being filled with
         # zeros. This is useful when there is a priority argument.
         self._add_zero_transition()
-    trajectory = self._trajectories.pop(trajectory_index)
-    self._trajectory_lengths.pop(trajectory_index)
-    for step_args in trajectory:
+    for step_args in self._trajectory:
       self._add(*step_args)
+    del self._trajectory
 
   def _add(self, *args):
     """Internal add method to add to the storage arrays.
