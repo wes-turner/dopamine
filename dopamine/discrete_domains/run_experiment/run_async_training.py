@@ -15,6 +15,7 @@
 """Runs asynchronous training."""
 
 from dopamine.discrete_domains.run_experiment import run_experiment
+import tensorflow as tf
 
 
 class AsyncRunner(run_experiment.Runner):
