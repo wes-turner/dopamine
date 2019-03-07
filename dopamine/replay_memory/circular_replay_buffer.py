@@ -259,7 +259,7 @@ class OutOfGraphReplayBuffer(object):
     for element_type in self.get_add_args_signature():
       zero_transition.append(
           np.zeros(element_type.shape, dtype=element_type.type))
-    self._add(*zero_transition)
+    self._add_transition_to_memory(*zero_transition)
 
   @lock_lib.locked_method()
   def add(self, observation, action, reward, terminal, *args):
@@ -283,10 +283,9 @@ class OutOfGraphReplayBuffer(object):
         extra_storage_types.
     """
     self._check_add_types(observation, action, reward, terminal, *args)
-    self._add_to_trajectory_buffer(observation, action, reward, terminal, *args)
+    self._add(observation, action, reward, terminal, *args)
 
-  def _add_to_trajectory_buffer(
-      self, observation, action, reward, terminal, *args):
+  def _add(self, observation, action, reward, terminal, *args):
     """Adds a transition to the trajectory buffer.
 
     Transitions are added to a trajectory until a terminal step is encountered
@@ -332,9 +331,9 @@ class OutOfGraphReplayBuffer(object):
     trajectory = self._trajectories.pop(trajectory_index)
     self._trajectory_lengths.pop(trajectory_index)
     for step_args in trajectory:
-      self._add(*step_args)
+      self._add_transition_to_memory(*step_args)
 
-  def _add(self, *args):
+  def _add_transition_to_memory(self, *args):
     """Internal add method to add to the storage arrays.
 
     Args:
