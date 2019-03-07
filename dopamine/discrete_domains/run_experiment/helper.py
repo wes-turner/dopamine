@@ -19,8 +19,8 @@ from __future__ import division
 from __future__ import print_function
 
 from dopamine.agents.dqn import dqn_agent
-from dopamine.agents.rainbow import rainbow_agent
 from dopamine.agents.implicit_quantile import implicit_quantile_agent
+from dopamine.agents.rainbow import rainbow_agent
 from dopamine.discrete_domains.run_experiment import run_async_training
 from dopamine.discrete_domains.run_experiment import run_experiment
 

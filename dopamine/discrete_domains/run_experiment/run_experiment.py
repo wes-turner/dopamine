@@ -27,10 +27,9 @@ from dopamine.discrete_domains import checkpointer
 from dopamine.discrete_domains import iteration_statistics
 from dopamine.discrete_domains import logger
 
+import gin.tf
 import numpy as np
 import tensorflow as tf
-
-import gin.tf
 
 
 @gin.configurable
@@ -407,7 +406,6 @@ class Runner(object):
                          self._num_iterations, self._start_iteration)
       return
     self._run_experiment_loop()
-
 
 
 @gin.configurable

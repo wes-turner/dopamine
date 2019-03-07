@@ -18,5 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+# pylint: disable=wildcard-import
 from dopamine.discrete_domains.run_experiment.helper import *
 from dopamine.discrete_domains.run_experiment.run_experiment import *
+# pylint: enable=wildcard-import
