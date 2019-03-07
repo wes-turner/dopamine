@@ -283,12 +283,10 @@ class OutOfGraphReplayBuffer(object):
         extra_storage_types.
     """
     self._check_add_types(observation, action, reward, terminal, *args)
-    trajectory_index = self._get_current_trajectory()
-    self._add_to_trajectory_buffer(
-        trajectory_index, observation, action, reward, terminal, *args)
+    self._add_to_trajectory_buffer(observation, action, reward, terminal, *args)
 
   def _add_to_trajectory_buffer(
-      self, trajectory_index, observation, action, reward, terminal, *args):
+      self, observation, action, reward, terminal, *args):
     """Adds a transition to the trajectory buffer.
 
     Transitions are added to a trajectory until a terminal step is encountered
@@ -296,7 +294,6 @@ class OutOfGraphReplayBuffer(object):
     trajectory stored to the buffer is added to the memory and emptied.
 
     Args:
-      trajectory_index: int, index of the trajectory to add to.
       observation: np.array with shape observation_shape.
       action: int, the action in the transition.
       reward: float, the reward received in the transition.
@@ -308,6 +305,7 @@ class OutOfGraphReplayBuffer(object):
       ValueError: If `transition_index` is not in the range
         [0, len(self._trajectories)].
     """
+    trajectory_index = self._get_current_trajectory()
     if not 0 <= trajectory_index < len(self._trajectories):
       raise ValueError(
           '`trajectory_index` must be in the '
@@ -321,14 +319,11 @@ class OutOfGraphReplayBuffer(object):
 
     if terminal or (self._max_trajectory_size and (
         len(trajectory) >= self._max_trajectory_size)):
-      self._add_trajectory_to_memory(trajectory_index)
+      self._add_trajectory_to_memory()
 
-  def _add_trajectory_to_memory(self, trajectory_index):
-    """Add a stored trajectory buffer to the replay memory.
-
-    Args:
-      trajectory_index: int, the index of the trajectory to add to the memory.
-    """
+  def _add_trajectory_to_memory(self):
+    """Add a stored trajectory buffer to the replay memory."""
+    trajectory_index = self._get_current_trajectory()
     if self.is_empty() or self._store['terminal'][self.cursor() - 1] == 1:
       for _ in range(self._stack_size - 1):
         # Child classes can rely on the padding transitions being filled with
