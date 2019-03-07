@@ -14,10 +14,44 @@
 # limitations under the License.
 """Runs asynchronous training."""
 
+import threading
+import time
+
 from dopamine.discrete_domains import atari_lib
 from dopamine.discrete_domains.run_experiment import run_experiment
 from dopamine.utils import threading_utils
 import tensorflow as tf
+
+_SLEEP_SECONDS = 0.01
+
+
+class _ThreadSafeQueue(object):
+  """Implements a thread safe queue than can be filled and free-up."""
+
+  def __init__(self, size):
+    self._size = size
+    self._lock = threading.Lock()
+    self.reset()
+
+  def reset(self):
+    """Empty the queue."""
+    with self._lock:
+      self._value = 0
+
+  def fill(self, maximum=None):
+    """Fill the queue."""
+    maximum = maximum or self._size
+    with self._lock:
+      delta = min(self._size - self._value, maximum)
+      self._value += delta
+    return delta
+
+  def pop(self):
+    """Removes one element from the queue."""
+    with self._lock:
+      self._value -= 1
+      if self._value < 0:
+        raise ValueError('Queue is already empty.')
 
 
 @threading_utils.local_attributes(['_environment'])
@@ -26,7 +60,8 @@ class AsyncRunner(run_experiment.Runner):
 
   def __init__(
       self, base_dir, create_agent_fn,
-      create_environment_fn=atari_lib.create_atari_environment, **kwargs):
+      create_environment_fn=atari_lib.create_atari_environment,
+      max_simultaneous_iterations=1, **kwargs):
     """Creates an asynchronous runner.
 
     Args:
@@ -35,10 +70,14 @@ class AsyncRunner(run_experiment.Runner):
         environment, and returns an agent.
       create_environment_fn: A function which receives a problem name and
         creates a Gym environment for that problem (e.g. an Atari 2600 game).
+      max_simultaneous_iterations: int, maximum number of iterations running
+        simultaneously in separate threads.
       **kwargs: Additional positional arguments.
     """
     threading_utils.initialize_local_attributes(
         self, _environment=create_environment_fn)
+    self._running_iterations = _ThreadSafeQueue(max_simultaneous_iterations)
+    self._output_lock = threading.Lock()
     super(AsyncRunner, self).__init__(
         base_dir=base_dir, create_agent_fn=create_agent_fn,
         create_environment_fn=create_environment_fn, **kwargs)
@@ -48,3 +87,24 @@ class AsyncRunner(run_experiment.Runner):
     config = tf.ConfigProto(allow_soft_placement=True)
     config.gpu_options.allow_growth = True
     self._sess = tf.Session('', config=config)
+
+  # TODO(aarg): Decouple experience generation from training.
+  def _run_experiment_loop(self):
+    """Runs iterations in multiple threads until `num_iterations` is reached."""
+    self._running_iterations.reset()
+    started_iterations = 0
+    while started_iterations < self._num_iterations:
+      iterations_to_start = self._running_iterations.fill(
+          self._num_iterations - started_iterations)
+      for i in range(iterations_to_start):
+        self._run_one_iteration(iteration=(i + started_iterations))
+      started_iterations += iterations_to_start
+      if not started_iterations:
+        time.sleep(_SLEEP_SECONDS)
+
+  def _run_one_iteration(self, iteration):
+    statistics = super(AsyncRunner, self)._run_one_iteration(iteration)
+    self._running_iterations.pop()
+    with self._output_lock:
+      self._log_experiment(iteration, statistics)
+      self._checkpoint_experiment(iteration)
