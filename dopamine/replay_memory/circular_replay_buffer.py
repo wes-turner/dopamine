@@ -50,7 +50,6 @@ STORE_FILENAME_PREFIX = '$store$_'
 # This constant determines how many iterations a checkpoint is kept for.
 CHECKPOINT_DURATION = 4
 MAX_SAMPLE_ATTEMPTS = 1000
-MAX_TRAJECTORY_SIZE = 1
 
 
 def invalid_range(cursor, replay_capacity, stack_size, update_horizon):
@@ -113,7 +112,7 @@ class OutOfGraphReplayBuffer(object):
                reward_shape=(),
                reward_dtype=np.float32,
                lock=lock_lib.get_default_lock(),
-               max_trajectory_size=MAX_TRAJECTORY_SIZE):
+               contiguous_trajectories=False):
     """Initializes OutOfGraphReplayBuffer.
 
     Args:
@@ -137,14 +136,13 @@ class OutOfGraphReplayBuffer(object):
       reward_dtype: np.dtype, type of elements in the reward.
       lock: lock object to use for protection against concurrent access. If
         `None` then locking is disabled.
-      max_trajectory_size: int, the maximum size of a trajectory contained in
-        the buffer before the trajectory is added to the memory. If `None` then
-        no maximum is applied and the buffer keeps filling until a terminal node
-        is added. In other words this specifies how many steps are added at a
-        time to the memory. It ensures that trajectories are stored contiguously
-        in memory when several threads are writing simultaneously (e.g. have
-        `AAABBB` instead of `ABABAB` when two trajectories A and B are being
-        written).
+      contiguous_trajectories: bool, whether to enforce that trajectories are
+        stored contiguously in memory (e.g. have `AAABBB` instead of `ABABAB`
+        when two trajectories A and B are being written simultaneously). If
+        `True`, a trajectory is only added to the memory when complete,
+        otherwise transitions are directly added to the memory which can lead
+        trajectories to overlap when trajectories are being written
+        simultaneously (in multiple threads).
 
     Raises:
       ValueError: If replay_capacity is too small to hold at least one
@@ -191,7 +189,7 @@ class OutOfGraphReplayBuffer(object):
     self._cumulative_discount_vector = np.array(
         [math.pow(self._gamma, n) for n in range(update_horizon)],
         dtype=np.float32)
-    self._max_trajectory_size = max_trajectory_size
+    self._contiguous_trajectories = contiguous_trajectories
 
     lock_lib.initialize_lock(self, lock=lock)
 
@@ -288,9 +286,9 @@ class OutOfGraphReplayBuffer(object):
   def _add(self, observation, action, reward, terminal, *args):
     """Adds a transition to the trajectory buffer.
 
-    Transitions are added to a trajectory until a terminal step is encountered
-    or the trajectory size reaches `max_trajectory_size`, in which case the
-    trajectory stored to the buffer is added to the memory and emptied.
+    Transitions are added to a trajectory. If `contiguous_trajectories` is
+    `True`, single transitions are added to memory, otherwise full trajectories
+    are added when a terminal step is encountered.
 
     Args:
       observation: np.array with shape observation_shape.
@@ -316,8 +314,7 @@ class OutOfGraphReplayBuffer(object):
 
     self._trajectory_lengths[trajectory_index] += 1
 
-    if terminal or (self._max_trajectory_size and (
-        len(trajectory) >= self._max_trajectory_size)):
+    if terminal or not self._contiguous_trajectories:
       self._add_trajectory_to_memory()
 
   def _add_trajectory_to_memory(self):
