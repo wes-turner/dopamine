@@ -182,7 +182,7 @@ class RunExperimentTest(tf.test.TestCase):
 
   @mock.patch.object(run_experiment.run_async_training, 'AsyncRunner')
   @mock.patch.object(run_experiment.helper, 'create_agent')
-  def testCreateTrainRunner(self, mock_create_agent, mock_runner_constructor):
+  def testCreateAsyncRunner(self, mock_create_agent, mock_runner_constructor):
     base_dir = '/tmp'
     run_experiment.create_runner(base_dir,
                                  schedule='async_train')
