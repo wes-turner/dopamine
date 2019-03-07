@@ -50,6 +50,7 @@ STORE_FILENAME_PREFIX = '$store$_'
 # This constant determines how many iterations a checkpoint is kept for.
 CHECKPOINT_DURATION = 4
 MAX_SAMPLE_ATTEMPTS = 1000
+MAX_TRAJECTORY_SIZE = 1
 
 
 def invalid_range(cursor, replay_capacity, stack_size, update_horizon):
@@ -112,7 +113,7 @@ class OutOfGraphReplayBuffer(object):
                reward_shape=(),
                reward_dtype=np.float32,
                lock=lock_lib.get_default_lock(),
-               max_trajectory_buffer=1):
+               max_trajectory_size=MAX_TRAJECTORY_SIZE):
     """Initializes OutOfGraphReplayBuffer.
 
     Args:
@@ -136,14 +137,14 @@ class OutOfGraphReplayBuffer(object):
       reward_dtype: np.dtype, type of elements in the reward.
       lock: lock object to use for protection against concurrent access. If
         `None` then locking is disabled.
-      max_trajectory_buffer: int, the maximum size of the trajectory contained
-        in the buffer before the trajectory is added to the memory. If `None`
-        then no maximum is applied and the buffer keeps filling until a terminal
-        node is added. In other words this specifies how many steps are added at
-        a time to the memory. It ensures that trajectories are stored
-        continuously in memory when several threads are writing simultaneously (
-        e.g. have `AAABBB` instead of `ABABAB` when two trajectories A and B are
-        being written).
+      max_trajectory_size: int, the maximum size of a trajectory contained in
+        the buffer before the trajectory is added to the memory. If `None` then
+        no maximum is applied and the buffer keeps filling until a terminal node
+        is added. In other words this specifies how many steps are added at a
+        time to the memory. It ensures that trajectories are stored contiguously
+        in memory when several threads are writing simultaneously (e.g. have
+        `AAABBB` instead of `ABABAB` when two trajectories A and B are being
+        written).
 
     Raises:
       ValueError: If replay_capacity is too small to hold at least one
@@ -190,7 +191,7 @@ class OutOfGraphReplayBuffer(object):
     self._cumulative_discount_vector = np.array(
         [math.pow(self._gamma, n) for n in range(update_horizon)],
         dtype=np.float32)
-    self._max_trajectory_buffer = max_trajectory_buffer
+    self._max_trajectory_size = max_trajectory_size
 
     lock_lib.initialize_lock(self, lock=lock)
 
@@ -291,7 +292,7 @@ class OutOfGraphReplayBuffer(object):
     """Adds a transition to the trajectory buffer.
 
     Transitions are added to a trajectory until a terminal step is encountered
-    or the trajectory size reaches `max_trajectory_buffer`, in which case the
+    or the trajectory size reaches `max_trajectory_size`, in which case the
     trajectory stored to the buffer is added to the memory and emptied.
 
     Args:
@@ -318,8 +319,8 @@ class OutOfGraphReplayBuffer(object):
 
     self._trajectory_lengths[trajectory_index] += 1
 
-    if terminal or (self._max_trajectory_buffer and (
-        len(trajectory) >= self._max_trajectory_buffer)):
+    if terminal or (self._max_trajectory_size and (
+        len(trajectory) >= self._max_trajectory_size)):
       self._add_trajectory_to_memory(trajectory_index)
 
   def _add_trajectory_to_memory(self, trajectory_index):
