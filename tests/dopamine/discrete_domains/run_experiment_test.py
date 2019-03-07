@@ -159,8 +159,8 @@ class RunExperimentTest(tf.test.TestCase):
       run_experiment.create_runner(base_dir,
                                    'Unknown schedule')
 
-  @mock.patch.object(run_experiment, 'Runner')
-  @mock.patch.object(run_experiment, 'create_agent')
+  @mock.patch.object(run_experiment.run_experiment, 'Runner')
+  @mock.patch.object(run_experiment.helper, 'create_agent')
   def testCreateRunner(self, mock_create_agent, mock_runner_constructor):
     base_dir = '/tmp'
     run_experiment.create_runner(base_dir)
@@ -169,12 +169,23 @@ class RunExperimentTest(tf.test.TestCase):
     self.assertEqual(base_dir, mock_args[0])
     self.assertEqual(mock_create_agent, mock_args[1])
 
-  @mock.patch.object(run_experiment, 'TrainRunner')
-  @mock.patch.object(run_experiment, 'create_agent')
+  @mock.patch.object(run_experiment.run_experiment, 'TrainRunner')
+  @mock.patch.object(run_experiment.helper, 'create_agent')
   def testCreateTrainRunner(self, mock_create_agent, mock_runner_constructor):
     base_dir = '/tmp'
     run_experiment.create_runner(base_dir,
                                  schedule='continuous_train')
+    self.assertEqual(1, mock_runner_constructor.call_count)
+    mock_args, _ = mock_runner_constructor.call_args
+    self.assertEqual(base_dir, mock_args[0])
+    self.assertEqual(mock_create_agent, mock_args[1])
+
+  @mock.patch.object(run_experiment.run_async_training, 'AsyncRunner')
+  @mock.patch.object(run_experiment.helper, 'create_agent')
+  def testCreateTrainRunner(self, mock_create_agent, mock_runner_constructor):
+    base_dir = '/tmp'
+    run_experiment.create_runner(base_dir,
+                                 schedule='async_train')
     self.assertEqual(1, mock_runner_constructor.call_count)
     mock_args, _ = mock_runner_constructor.call_args
     self.assertEqual(base_dir, mock_args[0])
