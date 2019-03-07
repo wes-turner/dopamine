@@ -102,7 +102,7 @@ class Runner(object):
 
     self._environment = create_environment_fn()
     # Set up a session and initialize variables.
-    self._sess = tf.Session('',	    self._initialize_session()
+    self._sess = tf.Session('',
                             config=tf.ConfigProto(allow_soft_placement=True))
     self._agent = create_agent_fn(self._sess, self._environment,
                                   summary_writer=self._summary_writer)
@@ -382,12 +382,6 @@ class Runner(object):
       experiment_data['current_iteration'] = iteration
       experiment_data['logs'] = self._logger.data
       self._checkpointer.save_checkpoint(iteration, experiment_data)
-
-  def _run_experiment_loop(self):
-    for iteration in range(self._start_iteration, self._num_iterations):
-      statistics = self._run_one_iteration(iteration)
-      self._log_experiment(iteration, statistics)
-      self._checkpoint_experiment(iteration)
 
   def run_experiment(self):
     """Runs a full experiment, spread over multiple iterations."""
