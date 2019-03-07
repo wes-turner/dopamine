@@ -31,11 +31,10 @@ import os
 import pickle
 
 from dopamine.utils import lock as lock_lib
-from dopamine.utils import threading_utils
-import gin.tf
 import numpy as np
 import tensorflow as tf
 
+import gin.tf
 
 # Defines a type describing part of the tuple returned by the replay
 # memory. Each element of the tuple is a tensor of shape [batch, ...] where
@@ -51,7 +50,6 @@ STORE_FILENAME_PREFIX = '$store$_'
 # This constant determines how many iterations a checkpoint is kept for.
 CHECKPOINT_DURATION = 4
 MAX_SAMPLE_ATTEMPTS = 1000
-MAX_TRAJECTORY_SIZE = 1
 
 
 def invalid_range(cursor, replay_capacity, stack_size, update_horizon):
@@ -81,7 +79,6 @@ def invalid_range(cursor, replay_capacity, stack_size, update_horizon):
        for i in range(stack_size + update_horizon)])
 
 
-@threading_utils.local_attributes(['_trajectory'])
 class OutOfGraphReplayBuffer(object):
   """A simple out-of-graph Replay Buffer.
 
@@ -114,8 +111,7 @@ class OutOfGraphReplayBuffer(object):
                action_dtype=np.int32,
                reward_shape=(),
                reward_dtype=np.float32,
-               lock=lock_lib.get_default_lock(),
-               max_trajectory_size=MAX_TRAJECTORY_SIZE):
+               lock=lock_lib.get_default_lock()):
     """Initializes OutOfGraphReplayBuffer.
 
     Args:
@@ -139,14 +135,6 @@ class OutOfGraphReplayBuffer(object):
       reward_dtype: np.dtype, type of elements in the reward.
       lock: lock object to use for protection against concurrent access. If
         `None` then locking is disabled.
-      max_trajectory_size: int, the maximum size of a trajectory contained in
-        the buffer before the trajectory is added to the memory. If `None` then
-        no maximum is applied and the buffer keeps filling until a terminal node
-        is added. In other words this specifies how many steps are added at a
-        time to the memory. It ensures that trajectories are stored contiguously
-        in memory when several threads are writing simultaneously (e.g. have
-        `AAABBB` instead of `ABABAB` when two trajectories A and B are being
-        written).
 
     Raises:
       ValueError: If replay_capacity is too small to hold at least one
@@ -193,10 +181,8 @@ class OutOfGraphReplayBuffer(object):
     self._cumulative_discount_vector = np.array(
         [math.pow(self._gamma, n) for n in range(update_horizon)],
         dtype=np.float32)
-    self._max_trajectory_size = max_trajectory_size
 
     lock_lib.initialize_lock(self, lock=lock)
-    threading_utils.initialize_local_attributes(self, _trajectory=lambda: [])
 
   def _create_storage(self):
     """Creates the numpy arrays used to store transitions.
@@ -245,7 +231,7 @@ class OutOfGraphReplayBuffer(object):
     for element_type in self.get_add_args_signature():
       zero_transition.append(
           np.zeros(element_type.shape, dtype=element_type.type))
-    self._add_transition_to_memory(*zero_transition)
+    self._add(*zero_transition)
 
   @lock_lib.locked_method()
   def add(self, observation, action, reward, terminal, *args):
@@ -269,42 +255,14 @@ class OutOfGraphReplayBuffer(object):
         extra_storage_types.
     """
     self._check_add_types(observation, action, reward, terminal, *args)
-    self._add(observation, action, reward, terminal, *args)
-
-  def _add(self, observation, action, reward, terminal, *args):
-    """Adds a transition to the trajectory buffer.
-
-    Transitions are added to a trajectory until a terminal step is encountered
-    or the trajectory size reaches `max_trajectory_size`, in which case the
-    trajectory stored to the buffer is added to the memory and emptied.
-
-    Args:
-      observation: np.array with shape observation_shape.
-      action: int, the action in the transition.
-      reward: float, the reward received in the transition.
-      terminal: A uint8 acting as a boolean indicating whether the transition
-                was terminal (1) or not (0).
-      *args: All the elements in a transition.
-    """
-    self._trajectory.append(
-        tuple([observation, action, reward, terminal] + list(args)))
-
-    if terminal or (self._max_trajectory_size and (
-        len(self._trajectory) >= self._max_trajectory_size)):
-      self._add_trajectory_to_memory()
-
-  def _add_trajectory_to_memory(self):
-    """Add a stored trajectory buffer to the replay memory."""
     if self.is_empty() or self._store['terminal'][self.cursor() - 1] == 1:
       for _ in range(self._stack_size - 1):
         # Child classes can rely on the padding transitions being filled with
         # zeros. This is useful when there is a priority argument.
         self._add_zero_transition()
-    for step_args in self._trajectory:
-      self._add_transition_to_memory(*step_args)
-    del self._trajectory
+    self._add(observation, action, reward, terminal, *args)
 
-  def _add_transition_to_memory(self, *args):
+  def _add(self, *args):
     """Internal add method to add to the storage arrays.
 
     Args:
