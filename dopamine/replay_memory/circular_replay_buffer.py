@@ -112,7 +112,7 @@ class OutOfGraphReplayBuffer(object):
                reward_shape=(),
                reward_dtype=np.float32,
                lock=lock_lib.get_default_lock(),
-               contiguous_trajectories=False):
+               use_contiguous_trajectories=False):
     """Initializes OutOfGraphReplayBuffer.
 
     Args:
@@ -136,13 +136,13 @@ class OutOfGraphReplayBuffer(object):
       reward_dtype: np.dtype, type of elements in the reward.
       lock: lock object to use for protection against concurrent access. If
         `None` then locking is disabled.
-      contiguous_trajectories: bool, whether to enforce that trajectories are
-        stored contiguously in memory (e.g. have `AAABBB` instead of `ABABAB`
-        when two trajectories A and B are being written simultaneously). If
-        `True`, a trajectory is only added to the memory when complete,
-        otherwise transitions are directly added to the memory which can lead
-        trajectories to overlap when trajectories are being written
-        simultaneously (in multiple threads).
+      use_contiguous_trajectories: bool, whether to enforce that trajectories
+        are stored contiguously in memory (e.g. have `AAABBB` instead of
+        `ABABAB` when two trajectories A and B are being written
+        simultaneously). If `True`, a trajectory is only added to the memory
+        when complete, otherwise transitions are directly added to the memory
+        which can lead trajectories to overlap when trajectories are being
+        written simultaneously (in multiple threads).
 
     Raises:
       ValueError: If replay_capacity is too small to hold at least one
@@ -189,7 +189,7 @@ class OutOfGraphReplayBuffer(object):
     self._cumulative_discount_vector = np.array(
         [math.pow(self._gamma, n) for n in range(update_horizon)],
         dtype=np.float32)
-    self._contiguous_trajectories = contiguous_trajectories
+    self._use_contiguous_trajectories = use_contiguous_trajectories
 
     lock_lib.initialize_lock(self, lock=lock)
 
@@ -286,7 +286,7 @@ class OutOfGraphReplayBuffer(object):
   def _add(self, observation, action, reward, terminal, *args):
     """Adds a transition to the trajectory buffer.
 
-    Transitions are added to a trajectory. If `contiguous_trajectories` is
+    Transitions are added to a trajectory. If `use_contiguous_trajectories` is
     `True`, single transitions are added to memory, otherwise full trajectories
     are added when a terminal step is encountered.
 
@@ -314,7 +314,7 @@ class OutOfGraphReplayBuffer(object):
 
     self._trajectory_lengths[trajectory_index] += 1
 
-    if terminal or not self._contiguous_trajectories:
+    if terminal or not self._use_contiguous_trajectories:
       self._add_trajectory_to_memory()
 
   def _add_trajectory_to_memory(self):

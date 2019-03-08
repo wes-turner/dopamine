@@ -686,7 +686,7 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
         stack_size=STACK_SIZE,
         replay_capacity=5,
         batch_size=BATCH_SIZE,
-        contiguous_trajectories=True)
+        use_contiguous_trajectories=True)
     self.assertEqual(memory.cursor(), 0)
     self.assertEqual(len(memory._trajectories), 0)
     zeros = np.zeros(OBSERVATION_SHAPE)
@@ -702,7 +702,7 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
         stack_size=STACK_SIZE,
         replay_capacity=5,
         batch_size=BATCH_SIZE,
-        contiguous_trajectories=True)
+        use_contiguous_trajectories=True)
     self.assertEqual(memory.cursor(), 0)
     self.assertEqual(len(memory._trajectories), 0)
     zeros = np.zeros(OBSERVATION_SHAPE)
