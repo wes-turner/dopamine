@@ -31,6 +31,7 @@ import os
 import pickle
 
 from dopamine.utils import lock as lock_lib
+from dopamine.utils import threading_utils
 import gin.tf
 import numpy as np
 import tensorflow as tf
@@ -79,6 +80,7 @@ def invalid_range(cursor, replay_capacity, stack_size, update_horizon):
        for i in range(stack_size + update_horizon)])
 
 
+@threading_utils.local_attributes(['_trajectory'])
 class OutOfGraphReplayBuffer(object):
   """A simple out-of-graph Replay Buffer.
 
@@ -192,6 +194,7 @@ class OutOfGraphReplayBuffer(object):
     self._use_contiguous_trajectories = use_contiguous_trajectories
 
     lock_lib.initialize_lock(self, lock=lock)
+    threading_utils.initialize_local_attributes(self, _trajectory=lambda: [])
 
   def _create_storage(self):
     """Creates the numpy arrays used to store transitions.
@@ -201,23 +204,6 @@ class OutOfGraphReplayBuffer(object):
       array_shape = [self._replay_capacity] + list(storage_element.shape)
       self._store[storage_element.name] = np.empty(
           array_shape, dtype=storage_element.type)
-    self._trajectories = []
-    self._trajectory_lengths = []
-
-  def _get_current_trajectory(self):
-    """Returns ongoing trajectory to write to and creates a new one if needed.
-
-    Returns:
-      int, the index of the last trajectory to write to.
-    """
-    if self._trajectories:
-      index = len(self._trajectories) - 1
-      return index
-
-    new_transition = []
-    self._trajectories.append(new_transition)
-    self._trajectory_lengths.append(0)
-    return self._get_current_trajectory()
 
   def get_add_args_signature(self):
     """The signature of the add function.
@@ -297,38 +283,23 @@ class OutOfGraphReplayBuffer(object):
       terminal: A uint8 acting as a boolean indicating whether the transition
                 was terminal (1) or not (0).
       *args: All the elements in a transition.
-
-    Raises:
-      ValueError: If `transition_index` is not in the range
-        [0, len(self._trajectories)].
     """
-    trajectory_index = self._get_current_trajectory()
-    if not 0 <= trajectory_index < len(self._trajectories):
-      raise ValueError(
-          '`trajectory_index` must be in the '
-          'range [0, {}[. Given {} instead.'.format(
-              len(self._trajectories), trajectory_index))
-    trajectory = self._trajectories[trajectory_index]
-    trajectory.append(
+    self._trajectory.append(
         tuple([observation, action, reward, terminal] + list(args)))
-
-    self._trajectory_lengths[trajectory_index] += 1
 
     if terminal or not self._use_contiguous_trajectories:
       self._add_current_trajectory_to_memory()
 
   def _add_current_trajectory_to_memory(self):
     """Add a stored trajectory buffer to the replay memory."""
-    trajectory_index = self._get_current_trajectory()
     if self.is_empty() or self._store['terminal'][self.cursor() - 1] == 1:
       for _ in range(self._stack_size - 1):
         # Child classes can rely on the padding transitions being filled with
         # zeros. This is useful when there is a priority argument.
         self._add_zero_transition()
-    trajectory = self._trajectories.pop(trajectory_index)
-    self._trajectory_lengths.pop(trajectory_index)
-    for step_args in trajectory:
+    for step_args in self._trajectory:
       self._add_transition_to_memory(*step_args)
+    del self._trajectory
 
   def _add_transition_to_memory(self, *args):
     """Internal add method to add to the storage arrays.
