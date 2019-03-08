@@ -26,45 +26,12 @@ _SLEEP_SECONDS = 0.01
 
 
 def async_method(method):
+  """Runs given method in separate thread."""
   def _method(*args):
     thread = threading.Thread(target=method, args=args)
     thread.start()
     thread.join()
   return _method
-
-
-class _ThreadSafeQueue(object):
-  """Implements a thread safe queue than can be filled and free-up."""
-
-  def __init__(self, size):
-    self._size = size
-    self._lock = threading.Lock()
-    self.reset()
-
-  def reset(self):
-    """Empty the queue."""
-    with self._lock:
-      self._value = 0
-      self._total = 0
-
-  def fill(self, maximum=None):
-    """Fill the queue."""
-    maximum = maximum or self._size
-    with self._lock:
-      delta = min(self._size - self._value, maximum)
-      self._value += delta
-    return delta
-
-  def pop(self):
-    """Removes one element from the queue."""
-    with self._lock:
-      self._value -= 1
-      self._total += 1
-      if self._value < 0:
-        raise ValueError('Queue is already empty.')
-
-  def total(self):
-    return self._total
 
 
 @threading_utils.local_attributes(['_environment'])
@@ -89,8 +56,9 @@ class AsyncRunner(run_experiment.Runner):
     """
     threading_utils.initialize_local_attributes(
         self, _environment=create_environment_fn)
-    self._running_iterations = _ThreadSafeQueue(max_simultaneous_iterations)
+    self._running_iterations = threading.Semaphore(max_simultaneous_iterations)
     self._output_lock = threading.Lock()
+
     super(AsyncRunner, self).__init__(
         base_dir=base_dir, create_agent_fn=create_agent_fn,
         create_environment_fn=create_environment_fn, **kwargs)
@@ -104,16 +72,9 @@ class AsyncRunner(run_experiment.Runner):
   # TODO(aarg): Decouple experience generation from training.
   def _run_experiment_loop(self):
     """Runs iterations in multiple threads until `num_iterations` is reached."""
-    self._running_iterations.reset()
-    started_iterations = 0
-    while self._running_iterations.total() < self._num_iterations:
-      iterations_to_start = self._running_iterations.fill(
-          self._num_iterations - started_iterations)
-      for i in range(iterations_to_start):
-        self._run_one_iteration(started_iterations + i)
-      started_iterations += iterations_to_start
-      if not started_iterations:
-        time.sleep(_SLEEP_SECONDS)
+    for iteration in range(self._start_iteration, self._num_iterations):
+      self._running_iterations.acquire()
+      self._run_one_iteration(iteration)
 
   @async_method
   def _run_one_iteration(self, iteration):
@@ -121,4 +82,4 @@ class AsyncRunner(run_experiment.Runner):
     with self._output_lock:
       self._log_experiment(iteration, statistics)
       self._checkpoint_experiment(iteration)
-    self._running_iterations.pop()
+    self._running_iterations.release()
