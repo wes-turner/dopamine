@@ -723,7 +723,7 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     self.assertEqual(memory.add_count, STACK_SIZE)
     self.assertEqual(len(memory._trajectory), 0)
 
-  def testAddMultipleThreads(self):
+  def testAddMultipleThreadsNodeNotAdded(self):
     memory = circular_replay_buffer.OutOfGraphReplayBuffer(
         observation_shape=OBSERVATION_SHAPE,
         stack_size=1,
@@ -740,10 +740,26 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
       memory.add(zeros, 0, 0, 1)
     # Check that terminal transition is added by itself.
     self.assertEqual(memory.add_count, 1)
+
+  def testAddMultipleThreadsNodeStored(self):
+    memory = circular_replay_buffer.OutOfGraphReplayBuffer(
+        observation_shape=OBSERVATION_SHAPE,
+        stack_size=1,
+        replay_capacity=5,
+        batch_size=BATCH_SIZE,
+        use_contiguous_trajectories=True)
+    self.assertEqual(memory.cursor(), 0)
+    self.assertEqual(len(memory._trajectory), 0)
+    zeros = np.zeros(OBSERVATION_SHAPE)
+    # Add transition in main thread.
+    memory.add(zeros, 0, 0, 0)
+    # Add a terminal transition in separate thread.
+    with test_utils.mock_thread('other-thread'):
+      memory.add(zeros, 0, 0, 0)
     # Add terminal transition in main thread.
     memory.add(zeros, 0, 0, 1)
     # Check that terminal transition is added along with initial transition.
-    self.assertEqual(memory.add_count, 3)
+    self.assertEqual(memory.add_count, 2)
 
 
 class WrappedReplayBufferTest(tf.test.TestCase):
