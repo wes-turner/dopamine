@@ -20,10 +20,10 @@ from __future__ import print_function
 import gzip
 import os
 import shutil
-import mock
 
 from absl import flags
 from dopamine.replay_memory import circular_replay_buffer
+import mock
 import numpy as np
 import tensorflow as tf
 
@@ -679,6 +679,49 @@ class OutOfGraphReplayBufferTest(tf.test.TestCase):
     """Tests that lock attribute is initialized properly."""
     memory = _create_dummy_memory(lock='lock-name')
     self.assertEqual(memory._lock, 'lock-name')
+
+  def testNodeNotAddedToMemory(self):
+    memory = circular_replay_buffer.OutOfGraphReplayBuffer(
+        observation_shape=OBSERVATION_SHAPE,
+        stack_size=1,
+        replay_capacity=5,
+        batch_size=BATCH_SIZE,
+        use_contiguous_trajectories=True)
+    self.assertEqual(memory.cursor(), 0)
+    zeros = np.zeros(OBSERVATION_SHAPE)
+    memory.add(zeros, 0, 0, 0)
+    self.assertEqual(memory.cursor(), 0)
+    self.assertEqual(memory.add_count, 0)
+
+  def testNodeAddedToTrajectory(self):
+    memory = circular_replay_buffer.OutOfGraphReplayBuffer(
+        observation_shape=OBSERVATION_SHAPE,
+        stack_size=1,
+        replay_capacity=5,
+        batch_size=BATCH_SIZE,
+        use_contiguous_trajectories=True)
+    self.assertEqual(memory.cursor(), 0)
+    zeros = np.zeros(OBSERVATION_SHAPE)
+    memory.add(zeros, 0, 0, 0)
+    memory.add(zeros, 0, 0, 1)
+    self.assertEqual(memory.cursor(), 2)
+    self.assertEqual(memory.add_count, 2)
+
+  def testAddTerminalNodeToTrajectoryBuffer(self):
+    memory = circular_replay_buffer.OutOfGraphReplayBuffer(
+        observation_shape=OBSERVATION_SHAPE,
+        stack_size=STACK_SIZE,
+        replay_capacity=5,
+        batch_size=BATCH_SIZE,
+        use_contiguous_trajectories=True)
+    self.assertEqual(memory.cursor(), 0)
+    self.assertEqual(len(memory._trajectories), 0)
+    zeros = np.zeros(OBSERVATION_SHAPE)
+    memory.add(zeros, 0, 0, 1)
+    self.assertEqual(memory.cursor(), STACK_SIZE)
+    self.assertEqual(memory.add_count, STACK_SIZE)
+    self.assertEqual(len(memory._trajectories), 0)
+    self.assertEqual(len(memory._trajectory_lengths), 0)
 
 
 class WrappedReplayBufferTest(tf.test.TestCase):
