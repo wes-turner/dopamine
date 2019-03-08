@@ -20,6 +20,7 @@ import time
 from dopamine.discrete_domains import atari_lib
 from dopamine.discrete_domains.run_experiment import run_experiment
 from dopamine.utils import threading_utils
+import gin.tf
 import tensorflow as tf
 
 _SLEEP_SECONDS = 0.01
@@ -28,13 +29,12 @@ _SLEEP_SECONDS = 0.01
 def async_method(method):
   """Runs given method in separate thread."""
   def _method(*args):
-    thread = threading.Thread(target=method, args=args)
-    thread.start()
-    thread.join()
+    threading.Thread(target=method, args=args).start()
   return _method
 
 
 @threading_utils.local_attributes(['_environment'])
+@gin.configurable
 class AsyncRunner(run_experiment.Runner):
   """Defines a train runner for asynchronous training."""
 
@@ -78,8 +78,10 @@ class AsyncRunner(run_experiment.Runner):
 
   @async_method
   def _run_one_iteration(self, iteration):
+    """Runs one iteration in separate thread, logs and checkpoints results."""
     statistics = super(AsyncRunner, self)._run_one_iteration(iteration)
     with self._output_lock:
       self._log_experiment(iteration, statistics)
       self._checkpoint_experiment(iteration)
+    tf.logging.info('Completed iteration %d.', iteration)
     self._running_iterations.release()
