@@ -315,9 +315,9 @@ class OutOfGraphReplayBuffer(object):
     self._trajectory_lengths[trajectory_index] += 1
 
     if terminal or not self._use_contiguous_trajectories:
-      self._add_trajectory_to_memory()
+      self._add_current_trajectory_to_memory()
 
-  def _add_trajectory_to_memory(self):
+  def _add_current_trajectory_to_memory(self):
     """Add a stored trajectory buffer to the replay memory."""
     trajectory_index = self._get_current_trajectory()
     if self.is_empty() or self._store['terminal'][self.cursor() - 1] == 1:
