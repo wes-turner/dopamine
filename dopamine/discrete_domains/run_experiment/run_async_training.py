@@ -25,6 +25,14 @@ import tensorflow as tf
 _SLEEP_SECONDS = 0.01
 
 
+def async_method(method):
+  def _method(*args):
+    thread = threading.Thread(target=method, args=args)
+    thread.start()
+    thread.join()
+  return _method
+
+
 class _ThreadSafeQueue(object):
   """Implements a thread safe queue than can be filled and free-up."""
 
@@ -37,6 +45,7 @@ class _ThreadSafeQueue(object):
     """Empty the queue."""
     with self._lock:
       self._value = 0
+      self._total = 0
 
   def fill(self, maximum=None):
     """Fill the queue."""
@@ -50,8 +59,12 @@ class _ThreadSafeQueue(object):
     """Removes one element from the queue."""
     with self._lock:
       self._value -= 1
+      self._total += 1
       if self._value < 0:
         raise ValueError('Queue is already empty.')
+
+  def total(self):
+    return self._total
 
 
 @threading_utils.local_attributes(['_environment'])
@@ -93,18 +106,19 @@ class AsyncRunner(run_experiment.Runner):
     """Runs iterations in multiple threads until `num_iterations` is reached."""
     self._running_iterations.reset()
     started_iterations = 0
-    while started_iterations < self._num_iterations:
+    while self._running_iterations.total() < self._num_iterations:
       iterations_to_start = self._running_iterations.fill(
           self._num_iterations - started_iterations)
       for i in range(iterations_to_start):
-        self._run_one_iteration(iteration=(i + started_iterations))
+        self._run_one_iteration(started_iterations + i)
       started_iterations += iterations_to_start
       if not started_iterations:
         time.sleep(_SLEEP_SECONDS)
 
+  @async_method
   def _run_one_iteration(self, iteration):
     statistics = super(AsyncRunner, self)._run_one_iteration(iteration)
-    self._running_iterations.pop()
     with self._output_lock:
       self._log_experiment(iteration, statistics)
       self._checkpoint_experiment(iteration)
+    self._running_iterations.pop()
