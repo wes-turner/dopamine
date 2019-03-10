@@ -21,8 +21,6 @@ from __future__ import print_function
 import os
 import shutil
 
-
-
 from absl import flags
 from dopamine.agents.dqn import dqn_agent
 from dopamine.agents.implicit_quantile import implicit_quantile_agent
@@ -30,10 +28,10 @@ from dopamine.agents.rainbow import rainbow_agent
 from dopamine.discrete_domains import checkpointer
 from dopamine.discrete_domains import logger
 from dopamine.discrete_domains import run_experiment
+import gin.tf
 import mock
 import tensorflow as tf
 
-import gin.tf
 
 FLAGS = flags.FLAGS
 
@@ -159,8 +157,8 @@ class RunExperimentTest(tf.test.TestCase):
       run_experiment.create_runner(base_dir,
                                    'Unknown schedule')
 
-  @mock.patch.object(run_experiment.run_experiment, 'Runner')
-  @mock.patch.object(run_experiment.helper, 'create_agent')
+  @mock.patch.object(run_experiment, 'Runner')
+  @mock.patch.object(run_experiment, 'create_agent')
   def testCreateRunner(self, mock_create_agent, mock_runner_constructor):
     base_dir = '/tmp'
     run_experiment.create_runner(base_dir)
@@ -169,8 +167,8 @@ class RunExperimentTest(tf.test.TestCase):
     self.assertEqual(base_dir, mock_args[0])
     self.assertEqual(mock_create_agent, mock_args[1])
 
-  @mock.patch.object(run_experiment.run_experiment, 'TrainRunner')
-  @mock.patch.object(run_experiment.helper, 'create_agent')
+  @mock.patch.object(run_experiment, 'TrainRunner')
+  @mock.patch.object(run_experiment, 'create_agent')
   def testCreateTrainRunner(self, mock_create_agent, mock_runner_constructor):
     base_dir = '/tmp'
     run_experiment.create_runner(base_dir,
@@ -180,8 +178,8 @@ class RunExperimentTest(tf.test.TestCase):
     self.assertEqual(base_dir, mock_args[0])
     self.assertEqual(mock_create_agent, mock_args[1])
 
-  @mock.patch.object(run_experiment.run_async_training, 'AsyncRunner')
-  @mock.patch.object(run_experiment.helper, 'create_agent')
+  @mock.patch.object(run_experiment, 'AsyncRunner')
+  @mock.patch.object(run_experiment, 'create_agent')
   def testCreateAsyncRunner(self, mock_create_agent, mock_runner_constructor):
     base_dir = '/tmp'
     run_experiment.create_runner(base_dir,
