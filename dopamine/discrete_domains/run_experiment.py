@@ -22,14 +22,99 @@ import os
 import sys
 import time
 
+from dopamine.agents.dqn import dqn_agent
+from dopamine.agents.implicit_quantile import implicit_quantile_agent
+from dopamine.agents.rainbow import rainbow_agent
 from dopamine.discrete_domains import atari_lib
 from dopamine.discrete_domains import checkpointer
 from dopamine.discrete_domains import iteration_statistics
 from dopamine.discrete_domains import logger
+from dopamine.utils import threading_utils
 
-import gin.tf
 import numpy as np
 import tensorflow as tf
+
+import gin.tf
+
+
+def load_gin_configs(gin_files, gin_bindings):
+  """Loads gin configuration files.
+
+  Args:
+    gin_files: list, of paths to the gin configuration files for this
+      experiment.
+    gin_bindings: list, of gin parameter bindings to override the values in
+      the config files.
+  """
+  gin.parse_config_files_and_bindings(gin_files,
+                                      bindings=gin_bindings,
+                                      skip_unknown=False)
+
+
+@gin.configurable
+def create_agent(sess, environment, agent_name=None, summary_writer=None,
+                 debug_mode=False):
+  """Creates an agent.
+
+  Args:
+    sess: A `tf.Session` object for running associated ops.
+    environment: An Atari 2600 Gym environment.
+    agent_name: str, name of the agent to create.
+    summary_writer: A Tensorflow summary writer to pass to the agent
+      for in-agent training statistics in Tensorboard.
+    debug_mode: bool, whether to output Tensorboard summaries. If set to true,
+      the agent will output in-episode statistics to Tensorboard. Disabled by
+      default as this results in slower training.
+
+  Returns:
+    agent: An RL agent.
+
+  Raises:
+    ValueError: If `agent_name` is not in supported list.
+  """
+  assert agent_name is not None
+  if not debug_mode:
+    summary_writer = None
+  if agent_name == 'dqn':
+    return dqn_agent.DQNAgent(sess, num_actions=environment.action_space.n,
+                              summary_writer=summary_writer)
+  elif agent_name == 'rainbow':
+    return rainbow_agent.RainbowAgent(
+        sess, num_actions=environment.action_space.n,
+        summary_writer=summary_writer)
+  elif agent_name == 'implicit_quantile':
+    return implicit_quantile_agent.ImplicitQuantileAgent(
+        sess, num_actions=environment.action_space.n,
+        summary_writer=summary_writer)
+  else:
+    raise ValueError('Unknown agent: {}'.format(agent_name))
+
+
+@gin.configurable
+def create_runner(base_dir, schedule='continuous_train_and_eval'):
+  """Creates an experiment Runner.
+
+  Args:
+    base_dir: str, base directory for hosting all subdirectories.
+    schedule: string, which type of Runner to use.
+
+  Returns:
+    runner: A `Runner` like object.
+
+  Raises:
+    ValueError: When an unknown schedule is encountered.
+  """
+  assert base_dir is not None
+  # Continuously runs training and evaluation until max num_iterations is hit.
+  if schedule == 'continuous_train_and_eval':
+    return Runner(base_dir, create_agent)
+  # Continuously runs training until max num_iterations is hit.
+  elif schedule == 'continuous_train':
+    return TrainRunner(base_dir, create_agent)
+  elif schedule == 'async_train':
+    return AsyncRunner(base_dir, create_agent)
+  else:
+    raise ValueError('Unknown schedule: {}'.format(schedule))
 
 
 @gin.configurable
@@ -102,17 +187,14 @@ class Runner(object):
 
     self._environment = create_environment_fn()
     # Set up a session and initialize variables.
-    self._initialize_session()
+    self._sess = tf.Session('',
+                            config=tf.ConfigProto(allow_soft_placement=True))
     self._agent = create_agent_fn(self._sess, self._environment,
                                   summary_writer=self._summary_writer)
     self._summary_writer.add_graph(graph=tf.get_default_graph())
     self._sess.run(tf.global_variables_initializer())
 
     self._initialize_checkpointer_and_maybe_resume(checkpoint_file_prefix)
-
-  def _initialize_session(self):
-    self._sess = tf.Session(
-        '', config=tf.ConfigProto(allow_soft_placement=True))
 
   def _create_directories(self):
     """Create necessary sub-directories."""
@@ -166,7 +248,7 @@ class Runner(object):
       action: int, the initial action chosen by the agent.
     """
     initial_observation = self._environment.reset()
-    return self._agent_begin_episode(initial_observation)
+    return self._agent.begin_episode(initial_observation)
 
   def _run_one_step(self, action):
     """Executes a single step in the environment.
@@ -188,12 +270,6 @@ class Runner(object):
       reward: float, the last reward from the environment.
     """
     self._agent.end_episode(reward)
-
-  def _agent_begin_episode(self, observation):
-    return self._agent.begin_episode(observation)
-
-  def _agent_step(self, reward, observation):
-    return self._agent.step(reward, observation)
 
   def _run_one_episode(self):
     """Executes a full trajectory of the agent interacting with the environment.
@@ -224,10 +300,10 @@ class Runner(object):
       elif is_terminal:
         # If we lose a life but the episode is not over, signal an artificial
         # end of episode to the agent.
-        self._end_episode(reward)
-        action = self._agent_begin_episode(observation)
+        self._agent.end_episode(reward)
+        action = self._agent.begin_episode(observation)
       else:
-        action = self._agent_step(reward, observation)
+        action = self._agent.step(reward, observation)
 
     self._end_episode(reward)
 
@@ -392,13 +468,6 @@ class Runner(object):
       experiment_data['logs'] = self._logger.data
       self._checkpointer.save_checkpoint(iteration, experiment_data)
 
-  def _run_experiment_loop(self):
-    """Runs training / evaluation loop."""
-    for iteration in range(self._start_iteration, self._num_iterations):
-      statistics = self._run_one_iteration(iteration)
-      self._log_experiment(iteration, statistics)
-      self._checkpoint_experiment(iteration)
-
   def run_experiment(self):
     """Runs a full experiment, spread over multiple iterations."""
     tf.logging.info('Beginning training...')
@@ -407,7 +476,10 @@ class Runner(object):
                          self._num_iterations, self._start_iteration)
       return
 
-    self._run_experiment_loop()
+    for iteration in range(self._start_iteration, self._num_iterations):
+      statistics = self._run_one_iteration(iteration)
+      self._log_experiment(iteration, statistics)
+      self._checkpoint_experiment(iteration)
 
 
 @gin.configurable
@@ -466,3 +538,32 @@ class TrainRunner(Runner):
             tag='Train/AverageReturns', simple_value=average_reward),
     ])
     self._summary_writer.add_summary(summary, iteration)
+
+
+@threading_utils.local_attributes(['_environment'])
+class AsyncRunner(Runner):
+  """Defines a train runner for asynchronous training."""
+
+  def __init__(
+      self, base_dir, create_agent_fn,
+      create_environment_fn=atari_lib.create_atari_environment, **kwargs):
+    """Creates an asynchronous runner.
+
+    Args:
+      base_dir: str, the base directory to host all required sub-directories.
+      create_agent_fn: A function that takes as args a Tensorflow session and an
+        environment, and returns an agent.
+      create_environment_fn: A function which receives a problem name and
+        creates a Gym environment for that problem (e.g. an Atari 2600 game).
+      **kwargs: Additional positional arguments.
+    """
+    threading_utils.initialize_local_attributes(
+        self, _environment=create_environment_fn)
+    super(AsyncRunner, self).__init__(
+        base_dir=base_dir, create_agent_fn=create_agent_fn,
+        create_environment_fn=create_environment_fn, **kwargs)
+
+  def _initialize_session(self):
+    """Creates a tf.Session that supports GPU usage in multiple threads."""
+    config = tf.ConfigProto(allow_soft_placement=True)
+    config.gpu_options.allow_gr
