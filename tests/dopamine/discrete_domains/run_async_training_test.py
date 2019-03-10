@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for run_async_training_test.py."""
+"""Tests for run_experiment_test.py."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from dopamine.discrete_domains.run_experiment import run_async_training
+from dopamine.discrete_domains import run_experiment
 from dopamine.utils import test_utils
 from tensorflow import test
 
@@ -32,7 +32,7 @@ class AsyncRunnerTest(test.TestCase):
     mock_env.step.return_value = (0, 0, True, {})
     environment_fn = test.mock.MagicMock(return_value=mock_env)
 
-    runner = run_async_training.AsyncRunner(
+    runner = run_experiment.AsyncRunner(
         base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
         create_environment_fn=environment_fn, num_iterations=1,
         training_steps=1, evaluation_steps=1)
