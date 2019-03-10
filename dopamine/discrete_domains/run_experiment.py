@@ -20,16 +20,100 @@ from __future__ import print_function
 
 import os
 import sys
+import threading
 import time
 
+from dopamine.agents.dqn import dqn_agent
+from dopamine.agents.implicit_quantile import implicit_quantile_agent
+from dopamine.agents.rainbow import rainbow_agent
 from dopamine.discrete_domains import atari_lib
 from dopamine.discrete_domains import checkpointer
 from dopamine.discrete_domains import iteration_statistics
 from dopamine.discrete_domains import logger
-
+from dopamine.utils import threading_utils
 import gin.tf
 import numpy as np
 import tensorflow as tf
+
+
+def load_gin_configs(gin_files, gin_bindings):
+  """Loads gin configuration files.
+
+  Args:
+    gin_files: list, of paths to the gin configuration files for this
+      experiment.
+    gin_bindings: list, of gin parameter bindings to override the values in
+      the config files.
+  """
+  gin.parse_config_files_and_bindings(gin_files,
+                                      bindings=gin_bindings,
+                                      skip_unknown=False)
+
+
+@gin.configurable
+def create_agent(sess, environment, agent_name=None, summary_writer=None,
+                 debug_mode=False):
+  """Creates an agent.
+
+  Args:
+    sess: A `tf.Session` object for running associated ops.
+    environment: An Atari 2600 Gym environment.
+    agent_name: str, name of the agent to create.
+    summary_writer: A Tensorflow summary writer to pass to the agent
+      for in-agent training statistics in Tensorboard.
+    debug_mode: bool, whether to output Tensorboard summaries. If set to true,
+      the agent will output in-episode statistics to Tensorboard. Disabled by
+      default as this results in slower training.
+
+  Returns:
+    agent: An RL agent.
+
+  Raises:
+    ValueError: If `agent_name` is not in supported list.
+  """
+  assert agent_name is not None
+  if not debug_mode:
+    summary_writer = None
+  if agent_name == 'dqn':
+    return dqn_agent.DQNAgent(sess, num_actions=environment.action_space.n,
+                              summary_writer=summary_writer)
+  elif agent_name == 'rainbow':
+    return rainbow_agent.RainbowAgent(
+        sess, num_actions=environment.action_space.n,
+        summary_writer=summary_writer)
+  elif agent_name == 'implicit_quantile':
+    return implicit_quantile_agent.ImplicitQuantileAgent(
+        sess, num_actions=environment.action_space.n,
+        summary_writer=summary_writer)
+  else:
+    raise ValueError('Unknown agent: {}'.format(agent_name))
+
+
+@gin.configurable
+def create_runner(base_dir, schedule='continuous_train_and_eval'):
+  """Creates an experiment Runner.
+
+  Args:
+    base_dir: str, base directory for hosting all subdirectories.
+    schedule: string, which type of Runner to use.
+
+  Returns:
+    runner: A `Runner` like object.
+
+  Raises:
+    ValueError: When an unknown schedule is encountered.
+  """
+  assert base_dir is not None
+  # Continuously runs training and evaluation until max num_iterations is hit.
+  if schedule == 'continuous_train_and_eval':
+    return Runner(base_dir, create_agent)
+  # Continuously runs training until max num_iterations is hit.
+  elif schedule == 'continuous_train':
+    return TrainRunner(base_dir, create_agent)
+  elif schedule == 'async_train':
+    return AsyncRunner(base_dir, create_agent)
+  else:
+    raise ValueError('Unknown schedule: {}'.format(schedule))
 
 
 @gin.configurable
@@ -412,16 +496,13 @@ class Runner(object):
 
 @gin.configurable
 class TrainRunner(Runner):
-  """Object that handles running experiments.
+  """Defines a train runner for asynchronous training."""
 
-  The `TrainRunner` differs from the base `Runner` class in that it does not
-  the evaluation phase. Checkpointing and logging for the train phase are
-  preserved as before.
-  """
-
-  def __init__(self, base_dir, create_agent_fn,
-               create_environment_fn=atari_lib.create_atari_environment):
-    """Initialize the TrainRunner object in charge of running a full experiment.
+  def __init__(
+      self, base_dir, create_agent_fn,
+      create_environment_fn=atari_lib.create_atari_environment,
+      max_simultaneous_iterations=1, **kwargs):
+    """Creates an asynchronous runner.
 
     Args:
       base_dir: str, the base directory to host all required sub-directories.
@@ -429,40 +510,38 @@ class TrainRunner(Runner):
         environment, and returns an agent.
       create_environment_fn: A function which receives a problem name and
         creates a Gym environment for that problem (e.g. an Atari 2600 game).
+      max_simultaneous_iterations: int, maximum number of iterations running
+        simultaneously in separate threads.
+      **kwargs: Additional positional arguments.
     """
-    tf.logging.info('Creating TrainRunner ...')
-    super(TrainRunner, self).__init__(base_dir, create_agent_fn,
-                                      create_environment_fn)
-    self._agent.eval_mode = False
+    threading_utils.initialize_local_attributes(
+        self, _environment=create_environment_fn)
+    self._running_iterations = threading.Semaphore(max_simultaneous_iterations)
+    self._output_lock = threading.Lock()
 
+    super(AsyncRunner, self).__init__(
+        base_dir=base_dir, create_agent_fn=create_agent_fn,
+        create_environment_fn=create_environment_fn, **kwargs)
+
+  def _initialize_session(self):
+    """Creates a tf.Session that supports GPU usage in multiple threads."""
+    config = tf.ConfigProto(allow_soft_placement=True)
+    config.gpu_options.allow_growth = True
+    self._sess = tf.Session('', config=config)
+
+  # TODO(aarg): Decouple experience generation from training.
+  def _run_experiment_loop(self):
+    """Runs iterations in multiple threads until `num_iterations` is reached."""
+    for iteration in range(self._start_iteration, self._num_iterations):
+      self._running_iterations.acquire()
+      self._run_one_iteration(iteration)
+
+  @async_method
   def _run_one_iteration(self, iteration):
-    """Runs one iteration of agent/environment interaction.
-
-    An iteration involves running several episodes until a certain number of
-    steps are obtained. This method differs from the `_run_one_iteration` method
-    in the base `Runner` class in that it only runs the train phase.
-
-    Args:
-      iteration: int, current iteration number, used as a global_step for saving
-        Tensorboard summaries.
-
-    Returns:
-      A dict containing summary statistics for this iteration.
-    """
-    statistics = iteration_statistics.IterationStatistics()
-    num_episodes_train, average_reward_train = self._run_train_phase(
-        statistics)
-
-    self._save_tensorboard_summaries(iteration, num_episodes_train,
-                                     average_reward_train)
-    return statistics.data_lists
-
-  def _save_tensorboard_summaries(self, iteration, num_episodes,
-                                  average_reward):
-    """Save statistics as tensorboard summaries."""
-    summary = tf.Summary(value=[
-        tf.Summary.Value(tag='Train/NumEpisodes', simple_value=num_episodes),
-        tf.Summary.Value(
-            tag='Train/AverageReturns', simple_value=average_reward),
-    ])
-    self._summary_writer.add_summary(summary, iteration)
+    """Runs one iteration in separate thread, logs and checkpoints results."""
+    statistics = super(AsyncRunner, self)._run_one_iteration(iteration)
+    with self._output_lock:
+      self._log_experiment(iteration, statistics)
+      self._checkpoint_experiment(iteration)
+    tf.logging.info('Completed iteration %d.', iteration)
+    self._running_iterations.release()
