@@ -17,10 +17,9 @@
 import datetime
 import os
 import shutil
-
-from absl import flags
 import time
 
+from absl import flags
 from dopamine.discrete_domains import train
 import tensorflow as tf
 
