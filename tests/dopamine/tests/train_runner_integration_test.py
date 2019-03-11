@@ -17,7 +17,6 @@
 import datetime
 import os
 import shutil
-import time
 
 from absl import flags
 from dopamine.discrete_domains import train

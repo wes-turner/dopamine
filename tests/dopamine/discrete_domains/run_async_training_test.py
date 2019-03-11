@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import time
+import threading
 
 from dopamine.discrete_domains import run_experiment
 from dopamine.utils import test_utils
@@ -62,6 +62,21 @@ class AsyncRunnerTest(test.TestCase):
     runner._save_tensorboard_summaries = test.mock.Mock()
     runner.run_experiment()
     self.assertEqual(mock_agent.begin_episode.call_count, 18)
+
+  @test.mock.patch.object(threading, 'Semaphore')
+  def testMultipleIterationManagement(self, semaphore):
+    mock_semaphore = test.mock.Mock()
+    semaphore.return_value = mock_semaphore
+    runner = run_experiment.AsyncRunner(
+        base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
+        create_environment_fn=_get_mock_environment_fn(), num_iterations=1,
+        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
+    runner._checkpoint_experiment = test.mock.Mock()
+    runner._log_experiment = test.mock.Mock()
+    runner._save_tensorboard_summaries = test.mock.Mock()
+    runner.run_experiment()
+    mock_semaphore.acquire.assert_called_once()
+    mock_semaphore.release.assert_called_once()
 
 
 if __name__ == '__main__':
