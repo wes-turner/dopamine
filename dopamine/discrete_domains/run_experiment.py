@@ -119,10 +119,13 @@ def create_runner(base_dir, schedule='continuous_train_and_eval'):
 @gin.configurable
 class Runner(object):
   """Object that handles running Dopamine experiments.
+
   Here we use the term 'experiment' to mean simulating interactions between the
   agent and the environment and reporting some statistics pertaining to these
   interactions.
+
   A simple scenario to train a DQN agent is as follows:
+
   ```python
   import dopamine.discrete_domains.atari_lib
   base_dir = '/tmp/simple_example'
@@ -145,6 +148,7 @@ class Runner(object):
                evaluation_steps=125000,
                max_steps_per_episode=27000):
     """Initialize the Runner object in charge of running a full experiment.
+
     Args:
       base_dir: str, the base directory to host all required sub-directories.
       create_agent_fn: A function that takes as args a Tensorflow session and an
@@ -160,6 +164,7 @@ class Runner(object):
       evaluation_steps: int, the number of evaluation steps to perform.
       max_steps_per_episode: int, maximum number of steps after which an episode
         terminates.
+
     This constructor will take the following actions:
     - Initialize an environment.
     - Initialize a `tf.Session`.
@@ -200,6 +205,7 @@ class Runner(object):
 
   def _initialize_checkpointer_and_maybe_resume(self, checkpoint_file_prefix):
     """Reloads the latest checkpoint if it exists.
+
     This method will first create a `Checkpointer` object and then call
     `checkpointer.get_latest_checkpoint_number` to determine if there is a valid
     checkpoint in self._checkpoint_dir, and what the largest file number is.
@@ -210,8 +216,10 @@ class Runner(object):
     then load the `Logger`'s data from the bundle, and will return the iteration
     number keyed by 'current_iteration' as one of the return values (along with
     the `Checkpointer` object).
+
     Args:
       checkpoint_file_prefix: str, the checkpoint file prefix.
+
     Returns:
       start_iteration: int, the iteration number to start the experiment from.
       experiment_checkpointer: `Checkpointer` object for the experiment.
@@ -237,6 +245,7 @@ class Runner(object):
 
   def _initialize_episode(self):
     """Initialization for a new episode.
+
     Returns:
       action: int, the initial action chosen by the agent.
     """
@@ -245,8 +254,10 @@ class Runner(object):
 
   def _run_one_step(self, action):
     """Executes a single step in the environment.
+
     Args:
       action: int, the action to perform in the environment.
+
     Returns:
       The observation, reward, and is_terminal values returned from the
         environment.
@@ -256,6 +267,7 @@ class Runner(object):
 
   def _end_episode(self, reward):
     """Finalizes an episode run.
+
     Args:
       reward: float, the last reward from the environment.
     """
@@ -269,6 +281,7 @@ class Runner(object):
 
   def _run_one_episode(self):
     """Executes a full trajectory of the agent interacting with the environment.
+
     Returns:
       The number of steps taken and the total reward.
     """
@@ -306,13 +319,16 @@ class Runner(object):
 
   def _run_one_phase(self, min_steps, statistics, run_mode_str):
     """Runs the agent/environment loop until a desired number of steps.
+
     We follow the Machado et al., 2017 convention of running full episodes,
     and terminating once we've run a minimum number of steps.
+
     Args:
       min_steps: int, minimum number of steps to generate in this phase.
       statistics: `IterationStatistics` object which records the experimental
         results.
       run_mode_str: str, describes the run mode for this agent.
+
     Returns:
       Tuple containing the number of steps taken in this phase (int), the sum of
         returns (float), and the number of episodes performed (int).
@@ -340,9 +356,11 @@ class Runner(object):
 
   def _run_train_phase(self, statistics):
     """Run training phase.
+
     Args:
       statistics: `IterationStatistics` object which records the experimental
         results. Note - This object is modified by this method.
+
     Returns:
       num_episodes: int, The number of episodes run in this phase.
       average_reward: The average reward generated in this phase.
@@ -363,9 +381,11 @@ class Runner(object):
 
   def _run_eval_phase(self, statistics):
     """Run evaluation phase.
+
     Args:
       statistics: `IterationStatistics` object which records the experimental
         results. Note - This object is modified by this method.
+
     Returns:
       num_episodes: int, The number of episodes run in this phase.
       average_reward: float, The average reward generated in this phase.
@@ -382,12 +402,15 @@ class Runner(object):
 
   def _run_one_iteration(self, iteration):
     """Runs one iteration of agent/environment interaction.
+
     An iteration involves running several episodes until a certain number of
     steps are obtained. The interleaving of train/eval phases implemented here
     are to match the implementation of (Mnih et al., 2015).
+
     Args:
       iteration: int, current iteration number, used as a global_step for saving
         Tensorboard summaries.
+
     Returns:
       A dict containing summary statistics for this iteration.
     """
@@ -409,6 +432,7 @@ class Runner(object):
                                   num_episodes_eval,
                                   average_reward_eval):
     """Save statistics as tensorboard summaries.
+
     Args:
       iteration: int, The current iteration number.
       num_episodes_train: int, number of training episodes run.
@@ -430,6 +454,7 @@ class Runner(object):
 
   def _log_experiment(self, iteration, statistics):
     """Records the results of the current iteration.
+
     Args:
       iteration: int, iteration number.
       statistics: `IterationStatistics` object containing statistics to log.
@@ -440,6 +465,7 @@ class Runner(object):
 
   def _checkpoint_experiment(self, iteration):
     """Checkpoint experiment data.
+
     Args:
       iteration: int, iteration number for checkpointing.
     """
@@ -471,6 +497,7 @@ class Runner(object):
 @gin.configurable
 class TrainRunner(Runner):
   """Object that handles running experiments.
+
   The `TrainRunner` differs from the base `Runner` class in that it does not
   the evaluation phase. Checkpointing and logging for the train phase are
   preserved as before.
@@ -479,6 +506,7 @@ class TrainRunner(Runner):
   def __init__(self, base_dir, create_agent_fn,
                create_environment_fn=atari_lib.create_atari_environment):
     """Initialize the TrainRunner object in charge of running a full experiment.
+
     Args:
       base_dir: str, the base directory to host all required sub-directories.
       create_agent_fn: A function that takes as args a Tensorflow session and an
@@ -493,12 +521,15 @@ class TrainRunner(Runner):
 
   def _run_one_iteration(self, iteration):
     """Runs one iteration of agent/environment interaction.
+
     An iteration involves running several episodes until a certain number of
     steps are obtained. This method differs from the `_run_one_iteration` method
     in the base `Runner` class in that it only runs the train phase.
+
     Args:
       iteration: int, current iteration number, used as a global_step for saving
         Tensorboard summaries.
+
     Returns:
       A dict containing summary statistics for this iteration.
     """
@@ -531,6 +562,7 @@ class AsyncRunner(Runner):
       create_environment_fn=atari_lib.create_atari_environment,
       max_simultaneous_iterations=1, **kwargs):
     """Creates an asynchronous runner.
+
     Args:
       base_dir: str, the base directory to host all required sub-directories.
       create_agent_fn: A function that takes as args a Tensorflow session and an
