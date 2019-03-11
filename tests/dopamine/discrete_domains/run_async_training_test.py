@@ -19,7 +19,6 @@ from __future__ import division
 from __future__ import print_function
 
 from dopamine.discrete_domains import run_experiment
-from dopamine.utils import test_utils
 from tensorflow import test
 
 
@@ -34,18 +33,13 @@ class AsyncRunnerTest(test.TestCase):
 
     runner = run_experiment.AsyncRunner(
         base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
-        create_environment_fn=environment_fn, num_iterations=1,
-        training_steps=1, evaluation_steps=1)
+        create_environment_fn=environment_fn, num_iterations=2,
+        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=2)
     runner._checkpoint_experiment = test.mock.Mock()
-    runner.run_experiment()
-    runner.run_experiment()
-    # Environment initialized only once in this thread.
+    # Environment called once in init.
     environment_fn.assert_called_once()
     runner.run_experiment()
-    with test_utils.mock_thread('other-thread'):
-      runner.run_experiment()
-    # Environment initialized a second time in 'other-thread'.
-    self.assertEqual(environment_fn.call_count, 2)
+    self.assertEqual(environment_fn.call_count, 3)
 
 
 if __name__ == '__main__':

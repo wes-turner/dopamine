@@ -552,6 +552,13 @@ class TrainRunner(Runner):
     self._summary_writer.add_summary(summary, iteration)
 
 
+def async_method(method):
+  def _method(*args):
+    thread = threading.Thread(target=method, args=args)
+    thread.start()
+  return _method
+
+
 @threading_utils.local_attributes(['_environment'])
 @gin.configurable
 class AsyncRunner(Runner):
