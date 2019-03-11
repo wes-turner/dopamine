@@ -89,10 +89,7 @@ class TrainRunnerIntegrationTest(tf.test.TestCase):
     tf.logging.info('####### DQN base_dir: {}'.format(FLAGS.base_dir))
     self.quickDqnAsyncFlags()
     train.main([])
-    time.sleep(5)
     self.verifyFilesCreated(FLAGS.base_dir)
-    # Wait for the checkpoint writing to complete to avoid the test being
-    # flaky.
     shutil.rmtree(FLAGS.base_dir)
 
 
