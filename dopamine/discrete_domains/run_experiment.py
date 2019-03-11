@@ -554,8 +554,7 @@ class TrainRunner(Runner):
 
 def async_method(method):
   def _method(*args):
-    thread = threading.Thread(target=method, args=args)
-    thread.start()
+    threading.Thread(target=method, args=args).start()
   return _method
 
 
