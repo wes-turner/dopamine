@@ -554,7 +554,9 @@ class TrainRunner(Runner):
 
 def async_method(method):
   def _method(*args):
-    threading.Thread(target=method, args=args).start()
+    thread = threading.Thread(target=method, args=args)
+    thread.start()
+    return thread
   return _method
 
 
@@ -583,7 +585,6 @@ class AsyncRunner(Runner):
         self, _environment=create_environment_fn)
     self._running_iterations = threading.Semaphore(max_simultaneous_iterations)
     self._output_lock = threading.Lock()
-    self._done_running = threading.Event()
 
     super(AsyncRunner, self).__init__(
         base_dir=base_dir, create_agent_fn=create_agent_fn,
@@ -598,12 +599,13 @@ class AsyncRunner(Runner):
   # TODO(aarg): Decouple experience generation from training.
   def _run_experiment_loop(self):
     """Runs iterations in multiple threads until `num_iterations` is reached."""
+    threads = []
     for iteration in range(self._start_iteration, self._num_iterations):
       self._running_iterations.acquire()
-      self._done_running.clear()
-      self._run_one_iteration(iteration)
+      threads.append(self._run_one_iteration(iteration))
     # Wait for all running iterations to complete.
-    self._done_running.wait()
+    for thread in threads:
+      thread.join()
 
   @async_method
   def _run_one_iteration(self, iteration):
@@ -614,4 +616,3 @@ class AsyncRunner(Runner):
       self._checkpoint_experiment(iteration)
     tf.logging.info('Completed iteration %d.', iteration)
     self._running_iterations.release()
-    self._done_running.set()
