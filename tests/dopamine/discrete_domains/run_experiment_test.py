@@ -180,6 +180,17 @@ class RunExperimentTest(tf.test.TestCase):
     self.assertEqual(base_dir, mock_args[0])
     self.assertEqual(mock_create_agent, mock_args[1])
 
+  @mock.patch.object(run_experiment, 'AsyncRunner')
+  @mock.patch.object(run_experiment, 'create_agent')
+  def testCreateAsyncRunner(self, mock_create_agent, mock_runner_constructor):
+    base_dir = '/tmp'
+    run_experiment.create_runner(base_dir,
+                                 schedule='async_train')
+    self.assertEqual(1, mock_runner_constructor.call_count)
+    mock_args, _ = mock_runner_constructor.call_args
+    self.assertEqual(base_dir, mock_args[0])
+    self.assertEqual(mock_create_agent, mock_args[1])
+
 
 class RunnerTest(tf.test.TestCase):
 

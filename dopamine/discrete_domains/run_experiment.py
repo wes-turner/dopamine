@@ -110,6 +110,8 @@ def create_runner(base_dir, schedule='continuous_train_and_eval'):
   # Continuously runs training until max num_iterations is hit.
   elif schedule == 'continuous_train':
     return TrainRunner(base_dir, create_agent)
+  elif schedule == 'async_train':
+    return AsyncRunner(base_dir, create_agent)
   else:
     raise ValueError('Unknown schedule: {}'.format(schedule))
 
@@ -535,3 +537,7 @@ class TrainRunner(Runner):
             tag='Train/AverageReturns', simple_value=average_reward),
     ])
     self._summary_writer.add_summary(summary, iteration)
+
+
+class AsyncRunner(Runner):
+  pass
