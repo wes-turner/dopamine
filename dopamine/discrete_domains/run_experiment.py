@@ -186,17 +186,16 @@ class Runner(object):
 
     self._environment = create_environment_fn()
     # Set up a session and initialize variables.
-    self._initialize_session()
+    config = tf.ConfigProto(allow_soft_placement=True)
+    config.gpu_options.allow_growth = True
+    self._sess = tf.Session('', config=config)
+
     self._agent = create_agent_fn(self._sess, self._environment,
                                   summary_writer=self._summary_writer)
     self._summary_writer.add_graph(graph=tf.get_default_graph())
     self._sess.run(tf.global_variables_initializer())
 
     self._initialize_checkpointer_and_maybe_resume(checkpoint_file_prefix)
-
-  def _initialize_session(self):
-    self._sess = tf.Session(
-        '', config=tf.ConfigProto(allow_soft_placement=True))
 
   def _create_directories(self):
     """Create necessary sub-directories."""
@@ -589,12 +588,6 @@ class AsyncRunner(Runner):
     super(AsyncRunner, self).__init__(
         base_dir=base_dir, create_agent_fn=create_agent_fn,
         create_environment_fn=create_environment_fn, **kwargs)
-
-  def _initialize_session(self):
-    """Creates a tf.Session that supports GPU usage in multiple threads."""
-    config = tf.ConfigProto(allow_soft_placement=True)
-    config.gpu_options.allow_growth = True
-    self._sess = tf.Session('', config=config)
 
   # TODO(aarg): Decouple experience generation from training.
   def _run_experiment_loop(self):

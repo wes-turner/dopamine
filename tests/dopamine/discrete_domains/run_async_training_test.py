@@ -34,9 +34,15 @@ def _get_mock_environment_fn():
 class AsyncRunnerTest(test.TestCase):
   """Tests for asynchronous trainer."""
 
-  def testLocalEnvironment(self):
-    """Tests that environment is managed locally."""
+  def testEnvironmentInitializationPerThread(self):
+    """Tests that a new environment is created for a new thread.
+
+    In synchronous model `create_environment_fn` is called only once at the
+    runner initialization. In synchronous model, `create_environment_fn` is
+    called for each new iteration.
+    """
     environment_fn = _get_mock_environment_fn()
+
     runner = run_experiment.AsyncRunner(
         base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
         create_environment_fn=environment_fn, num_iterations=1,

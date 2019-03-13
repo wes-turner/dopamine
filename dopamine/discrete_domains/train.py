@@ -50,6 +50,7 @@ def main(unused_argv):
     unused_argv: Arguments (unused).
   """
   tf.logging.set_verbosity(tf.logging.INFO)
+  # TODO(#124): Refactor to work with gin bindings.
   if FLAGS.async:
     runner = run_experiment.create_runner(
         FLAGS.base_dir, schedule='async_train')
