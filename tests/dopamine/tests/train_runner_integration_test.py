@@ -18,8 +18,6 @@ import datetime
 import os
 import shutil
 
-
-
 from absl import flags
 
 from dopamine.discrete_domains import train
@@ -52,6 +50,14 @@ class TrainRunnerIntegrationTest(tf.test.TestCase):
         'dqn_agent.DQNAgent.min_replay_history=500',
         'WrappedReplayBuffer.replay_capacity=100'
     ]
+    FLAGS.async = False
+    FLAGS.alsologtostderr = True
+
+  def quickDqnAsyncFlags(self):
+    """Assign flags for a quick run of DQN agent."""
+    FLAGS.gin_files = []
+    FLAGS.gin_bindings = []
+    FLAGS.async = True
     FLAGS.alsologtostderr = True
 
   def verifyFilesCreated(self, base_dir):
@@ -73,6 +79,15 @@ class TrainRunnerIntegrationTest(tf.test.TestCase):
     tf.logging.info('####### Training the DQN agent #####')
     tf.logging.info('####### DQN base_dir: {}'.format(FLAGS.base_dir))
     self.quickDqnFlags()
+    train.main([])
+    self.verifyFilesCreated(FLAGS.base_dir)
+    shutil.rmtree(FLAGS.base_dir)
+
+  def testIntegrationDqnAsync(self):
+    """Test the DQN agent with asynchronous training."""
+    tf.logging.info('####### Training the DQN agent asynchronously #####')
+    tf.logging.info('####### DQN base_dir: {}'.format(FLAGS.base_dir))
+    self.quickDqnAsyncFlags()
     train.main([])
     self.verifyFilesCreated(FLAGS.base_dir)
     shutil.rmtree(FLAGS.base_dir)

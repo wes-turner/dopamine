@@ -29,11 +29,10 @@ from dopamine.discrete_domains import atari_lib
 from dopamine.discrete_domains import checkpointer
 from dopamine.discrete_domains import iteration_statistics
 from dopamine.discrete_domains import logger
-
+from dopamine.utils import threading_utils
+import gin.tf
 import numpy as np
 import tensorflow as tf
-
-import gin.tf
 
 
 def load_gin_configs(gin_files, gin_bindings):
@@ -186,8 +185,10 @@ class Runner(object):
 
     self._environment = create_environment_fn()
     # Set up a session and initialize variables.
-    self._sess = tf.Session('',
-                            config=tf.ConfigProto(allow_soft_placement=True))
+    config = tf.ConfigProto(allow_soft_placement=True)
+    config.gpu_options.allow_growth = True
+    self._sess = tf.Session('', config=config)
+
     self._agent = create_agent_fn(self._sess, self._environment,
                                   summary_writer=self._summary_writer)
     self._summary_writer.add_graph(graph=tf.get_default_graph())
@@ -539,5 +540,25 @@ class TrainRunner(Runner):
     self._summary_writer.add_summary(summary, iteration)
 
 
+@threading_utils.local_attributes(['_environment'])
 class AsyncRunner(Runner):
-  pass
+  """Defines a train runner for asynchronous training."""
+
+  def __init__(
+      self, base_dir, create_agent_fn,
+      create_environment_fn=atari_lib.create_atari_environment, **kwargs):
+    """Creates an asynchronous runner.
+
+    Args:
+      base_dir: str, the base directory to host all required sub-directories.
+      create_agent_fn: A function that takes as args a Tensorflow session and an
+        environment, and returns an agent.
+      create_environment_fn: A function which receives a problem name and
+        creates a Gym environment for that problem (e.g. an Atari 2600 game).
+      **kwargs: Additional positional arguments.
+    """
+    threading_utils.initialize_local_attributes(
+        self, _environment=create_environment_fn)
+    super(AsyncRunner, self).__init__(
+        base_dir=base_dir, create_agent_fn=create_agent_fn,
+        create_environment_fn=create_environment_fn, **kwargs)
