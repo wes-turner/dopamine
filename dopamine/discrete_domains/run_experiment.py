@@ -476,7 +476,10 @@ class Runner(object):
       self._checkpointer.save_checkpoint(iteration, experiment_data)
 
   def _run_experiment_loop(self):
-    """Runs training / evaluation loop."""
+    """Runs required number of training iterations sequentially.
+
+    Statistics from each iteration are logged and exported for tensorboard.
+    """
     for iteration in range(self._start_iteration, self._num_iterations):
       statistics = self._run_one_iteration(iteration)
       self._log_experiment(iteration, statistics)
@@ -551,7 +554,16 @@ class TrainRunner(Runner):
     self._summary_writer.add_summary(summary, iteration)
 
 
-def async_method(method):
+def threaded_method(method):
+  """Wraps a class method to run in a separate thread.
+
+  Args:
+    method: A class method taking positional arguments.
+
+  Returns:
+    A method with the same signature, that will run in a separate thread in a
+    non blocking manner.
+  """
   def _method(*args):
     thread = threading.Thread(target=method, args=args)
     thread.start()
@@ -591,7 +603,15 @@ class AsyncRunner(Runner):
 
   # TODO(aarg): Decouple experience generation from training.
   def _run_experiment_loop(self):
-    """Runs iterations in multiple threads until `num_iterations` is reached."""
+    """Runs required number of training iterations sequentially.
+
+    Statistics from each iteration are logged and exported for tensorboard.
+
+    Iterations are run in multiple threads simultaneously (number of
+    simultaneous threads is specified by `max_simultaneous_iterations`). Each
+    time an iteration completes a new one starts until the right number of
+    iterations is run.
+    """
     threads = []
     for iteration in range(self._start_iteration, self._num_iterations):
       self._running_iterations.acquire()
@@ -600,9 +620,17 @@ class AsyncRunner(Runner):
     for thread in threads:
       thread.join()
 
-  @async_method
+  @threaded_method
   def _run_one_iteration(self, iteration):
-    """Runs one iteration in separate thread, logs and checkpoints results."""
+    """Runs one iteration in separate thread, logs and checkpoints results.
+
+    Same as parent Runner implementation except that summary statistics are
+    directly logged instead of being returned.
+
+    Args:
+      iteration: int, current iteration number, used as a global_step for saving
+        Tensorboard summaries
+    """
     statistics = super(AsyncRunner, self)._run_one_iteration(iteration)
     with self._output_lock:
       self._log_experiment(iteration, statistics)
