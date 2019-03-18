@@ -249,7 +249,7 @@ class Runner(object):
       action: int, the initial action chosen by the agent.
     """
     initial_observation = self._environment.reset()
-    return self._agent_begin_episode(initial_observation)
+    return self._agent.begin_episode(initial_observation)
 
   def _run_one_step(self, action):
     """Executes a single step in the environment.
@@ -271,12 +271,6 @@ class Runner(object):
       reward: float, the last reward from the environment.
     """
     self._agent.end_episode(reward)
-
-  def _agent_begin_episode(self, observation):
-    return self._agent.begin_episode(observation)
-
-  def _agent_step(self, reward, observation):
-    return self._agent.step(reward, observation)
 
   def _run_one_episode(self):
     """Executes a full trajectory of the agent interacting with the environment.
@@ -308,9 +302,9 @@ class Runner(object):
         # If we lose a life but the episode is not over, signal an artificial
         # end of episode to the agent.
         self._end_episode(reward)
-        action = self._agent_begin_episode(observation)
+        action = self._agent.begin_episode(observation)
       else:
-        action = self._agent_step(reward, observation)
+        action = self._agent.step(reward, observation)
 
     self._end_episode(reward)
 
