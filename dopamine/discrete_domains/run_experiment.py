@@ -186,17 +186,16 @@ class Runner(object):
 
     self._environment = create_environment_fn()
     # Set up a session and initialize variables.
-    self._initialize_session()
+    config = tf.ConfigProto(allow_soft_placement=True)
+    config.gpu_options.allow_growth = True
+    self._sess = tf.Session('', config=config)
+
     self._agent = create_agent_fn(self._sess, self._environment,
                                   summary_writer=self._summary_writer)
     self._summary_writer.add_graph(graph=tf.get_default_graph())
     self._sess.run(tf.global_variables_initializer())
 
     self._initialize_checkpointer_and_maybe_resume(checkpoint_file_prefix)
-
-  def _initialize_session(self):
-    self._sess = tf.Session(
-        '', config=tf.ConfigProto(allow_soft_placement=True))
 
   def _create_directories(self):
     """Create necessary sub-directories."""
@@ -250,7 +249,7 @@ class Runner(object):
       action: int, the initial action chosen by the agent.
     """
     initial_observation = self._environment.reset()
-    return self._agent_begin_episode(initial_observation)
+    return self._agent.begin_episode(initial_observation)
 
   def _run_one_step(self, action):
     """Executes a single step in the environment.
@@ -272,12 +271,6 @@ class Runner(object):
       reward: float, the last reward from the environment.
     """
     self._agent.end_episode(reward)
-
-  def _agent_begin_episode(self, observation):
-    return self._agent.begin_episode(observation)
-
-  def _agent_step(self, reward, observation):
-    return self._agent.step(reward, observation)
 
   def _run_one_episode(self):
     """Executes a full trajectory of the agent interacting with the environment.
@@ -309,9 +302,9 @@ class Runner(object):
         # If we lose a life but the episode is not over, signal an artificial
         # end of episode to the agent.
         self._end_episode(reward)
-        action = self._agent_begin_episode(observation)
+        action = self._agent.begin_episode(observation)
       else:
-        action = self._agent_step(reward, observation)
+        action = self._agent.step(reward, observation)
 
     self._end_episode(reward)
 
@@ -477,7 +470,10 @@ class Runner(object):
       self._checkpointer.save_checkpoint(iteration, experiment_data)
 
   def _run_experiment_loop(self):
-    """Runs training / evaluation loop."""
+    """Runs required number of training iterations sequentially.
+
+    Statistics from each iteration are logged and exported for tensorboard.
+    """
     for iteration in range(self._start_iteration, self._num_iterations):
       statistics = self._run_one_iteration(iteration)
       self._log_experiment(iteration, statistics)
@@ -552,7 +548,16 @@ class TrainRunner(Runner):
     self._summary_writer.add_summary(summary, iteration)
 
 
-def async_method(method):
+def threaded_method(method):
+  """Wraps a class method to run in a separate thread.
+
+  Args:
+    method: A class method taking positional arguments.
+
+  Returns:
+    A method with the same signature, that will run in a separate thread in a
+    non blocking manner.
+  """
   def _method(*args):
     thread = threading.Thread(target=method, args=args)
     thread.start()
@@ -590,15 +595,17 @@ class AsyncRunner(Runner):
         base_dir=base_dir, create_agent_fn=create_agent_fn,
         create_environment_fn=create_environment_fn, **kwargs)
 
-  def _initialize_session(self):
-    """Creates a tf.Session that supports GPU usage in multiple threads."""
-    config = tf.ConfigProto(allow_soft_placement=True)
-    config.gpu_options.allow_growth = True
-    self._sess = tf.Session('', config=config)
-
   # TODO(aarg): Decouple experience generation from training.
   def _run_experiment_loop(self):
-    """Runs iterations in multiple threads until `num_iterations` is reached."""
+    """Runs required number of training iterations sequentially.
+
+    Statistics from each iteration are logged and exported for tensorboard.
+
+    Iterations are run in multiple threads simultaneously (number of
+    simultaneous threads is specified by `max_simultaneous_iterations`). Each
+    time an iteration completes a new one starts until the right number of
+    iterations is run.
+    """
     threads = []
     for iteration in range(self._start_iteration, self._num_iterations):
       self._running_iterations.acquire()
@@ -607,9 +614,17 @@ class AsyncRunner(Runner):
     for thread in threads:
       thread.join()
 
-  @async_method
+  @threaded_method
   def _run_one_iteration(self, iteration):
-    """Runs one iteration in separate thread, logs and checkpoints results."""
+    """Runs one iteration in separate thread, logs and checkpoints results.
+
+    Same as parent Runner implementation except that summary statistics are
+    directly logged instead of being returned.
+
+    Args:
+      iteration: int, current iteration number, used as a global_step for saving
+        Tensorboard summaries
+    """
     statistics = super(AsyncRunner, self)._run_one_iteration(iteration)
     with self._output_lock:
       self._log_experiment(iteration, statistics)
