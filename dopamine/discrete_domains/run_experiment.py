@@ -626,10 +626,18 @@ class AsyncRunner(Runner):
       iteration: int, current iteration number, used as a global_step for saving
         Tensorboard summaries
     """
-    statistics = super(AsyncRunner, self)._run_one_iteration(iteration)
+    statistics = iteration_statistics.IterationStatistics()
+    tf.logging.info('Starting iteration %d', iteration)
+    num_episodes_train, average_reward_train = self._run_train_phase(
+        statistics)
+    num_episodes_eval, average_reward_eval = self._run_eval_phase(
+        statistics)
     with self._output_lock:
       self._log_experiment(self._completed_iteration, statistics)
       self._checkpoint_experiment(self._completed_iteration)
+      self._save_tensorboard_summaries(
+          self._completed_iteration, num_episodes_train, average_reward_train,
+          num_episodes_eval, average_reward_eval)
       self._completed_iteration += 1
     tf.logging.info('Completed iteration %d.', iteration)
     self._running_iterations.release()
