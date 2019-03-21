@@ -607,6 +607,7 @@ class AsyncRunner(Runner):
     iterations is run.
     """
     threads = []
+    self._completed_iteration = self._start_iteration
     for iteration in range(self._start_iteration, self._num_iterations):
       self._running_iterations.acquire()
       threads.append(self._run_one_iteration(iteration))
@@ -627,7 +628,8 @@ class AsyncRunner(Runner):
     """
     statistics = super(AsyncRunner, self)._run_one_iteration(iteration)
     with self._output_lock:
-      self._log_experiment(iteration, statistics)
-      self._checkpoint_experiment(iteration)
+      self._log_experiment(self._completed_iteration, statistics)
+      self._checkpoint_experiment(self._completed_iteration)
+      self._completed_iteration += 1
     tf.logging.info('Completed iteration %d.', iteration)
     self._running_iterations.release()
