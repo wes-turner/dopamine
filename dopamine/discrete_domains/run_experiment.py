@@ -553,17 +553,30 @@ def threaded_method(method):
   """Wraps a class method to run in a separate thread.
 
   Args:
-    method: A class method taking positional arguments.
+    method: A class method with signature:
+      * Args:
+        * self
+        * *args: positional arguments.
 
   Returns:
-    A method with the same signature, that will run in a separate thread in a
-    non blocking manner.
+    A method that will run in a separate thread in a non blocking manner, with
+    the following signature:
+      * Args:
+        * self
+        * lock: semaphore object to acquire before starting the method and
+          release at the end of the method execution.
+        * *args: positional arguments.
   """
-  def _method(*args):
-    thread = threading.Thread(target=method, args=args)
+  def _decorated_method(self, lock, *args):
+    def _threaded_method(self, lock, *args):
+      method(self, *args)
+      lock.release()
+    lock.acquire()
+    thread = threading.Thread(
+        target=_threaded_method, args=[self, lock] + list(args))
     thread.start()
     return thread
-  return _method
+  return _decorated_method
 
 
 @threading_utils.local_attributes(['_environment'])
@@ -589,9 +602,8 @@ class AsyncRunner(Runner):
     """
     threading_utils.initialize_local_attributes(
         self, _environment=create_environment_fn)
-    self._running_iterations = threading.Semaphore(max_simultaneous_iterations)
+    self._max_simultaneous_iterations = max_simultaneous_iterations
     self._eval_period = max_simultaneous_iterations
-    self._eval_iterations = threading.Semaphore(1)
     self._output_lock = threading.Lock()
 
     super(AsyncRunner, self).__init__(
@@ -610,21 +622,23 @@ class AsyncRunner(Runner):
     iterations is run.
     """
     threads = []
+    train_iterations = threading.Semaphore(self._max_simultaneous_iterations)
+    eval_iterations = threading.Semaphore(1)
     self._completed_iteration = self._start_iteration
+
     for iteration in range(self._start_iteration, self._num_iterations):
       if iteration % self._eval_period == 0:
-        self._eval_iterations.acquire()
         threads.append(self._run_one_iteration(
-            iteration, self._eval_iterations, True))
-      self._running_iterations.acquire()
+            eval_iterations, iteration, True))
       threads.append(self._run_one_iteration(
-          iteration, self._running_iterations, False))
+          train_iterations, iteration, False))
+
     # Wait for all running iterations to complete.
     for thread in threads:
       thread.join()
 
   @threaded_method
-  def _run_one_iteration(self, iteration, lock, eval_mode):
+  def _run_one_iteration(self, iteration, eval_mode):
     """Runs one iteration in separate thread, logs and checkpoints results.
 
     Same as parent Runner implementation except that summary statistics are
@@ -633,7 +647,6 @@ class AsyncRunner(Runner):
     Args:
       iteration: int, current iteration number, used as a global_step for saving
         Tensorboard summaries.
-      lock: Semaphore object, to release once the iteration is completed.
       eval_mode: bool, whether this is an evaluation iteration.
     """
     statistics = iteration_statistics.IterationStatistics()
@@ -653,7 +666,6 @@ class AsyncRunner(Runner):
         self._checkpoint_experiment(self._completed_iteration)
         self._completed_iteration += 1
     tf.logging.info('Completed %s.', iteration_name)
-    lock.release()
 
   def _save_tensorboard_summaries(self, iteration, num_episodes,
                                   average_reward, tag):

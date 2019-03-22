@@ -126,7 +126,7 @@ class InternalIterationCounterTest(test.TestCase):
 
   def testCounterUsed(self):
     self.runner._completed_iteration = 20
-    self.runner._run_one_iteration(36, test.mock.Mock(), False).join()
+    self.runner._run_one_iteration(test.mock.Mock(), 36, False).join()
     self.runner._checkpoint_experiment.assert_called_once_with(20)
 
   def testCounterInitialized(self):
@@ -135,7 +135,7 @@ class InternalIterationCounterTest(test.TestCase):
 
   def testCounterIncremented(self):
     self.runner._completed_iteration = 20
-    self.runner._run_one_iteration(36, test.mock.Mock(), False).join()
+    self.runner._run_one_iteration(test.mock.Mock(), 36, False).join()
     self.assertEqual(self.runner._completed_iteration, 21)
 
 
