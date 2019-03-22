@@ -656,11 +656,11 @@ class AsyncRunner(Runner):
     run_phase = self._run_eval_phase if eval_mode else self._run_train_phase
     num_episodes, average_reward = run_phase(statistics)
     with self._output_lock:
+      logging_iteration = iteration if eval_mode else self._completed_iteration
       self._log_experiment(
-          self._completed_iteration, statistics,
-          suffix='_eval' if eval_mode else '')
+          logging_iteration, statistics, suffix='_eval' if eval_mode else '')
       self._save_tensorboard_summaries(
-          self._completed_iteration, num_episodes, average_reward,
+          logging_iteration, num_episodes, average_reward,
           tag='Eval' if eval_mode else 'Train')
       if not eval_mode:
         self._checkpoint_experiment(self._completed_iteration)
