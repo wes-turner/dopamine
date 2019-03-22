@@ -633,8 +633,8 @@ class AsyncRunner(Runner):
     Args:
       iteration: int, current iteration number, used as a global_step for saving
         Tensorboard summaries.
-      lock:
-      eval:
+      lock: Semaphore object, to release once the iteration is completed.
+      eval: bool, whether this is an evaluation iteration.
     """
     statistics = iteration_statistics.IterationStatistics()
     iteration_name = '{}iteration {}'.format(
