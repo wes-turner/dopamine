@@ -624,7 +624,7 @@ class AsyncRunner(Runner):
       thread.join()
 
   @threaded_method
-  def _run_one_iteration(self, iteration, lock, eval):
+  def _run_one_iteration(self, iteration, lock, eval_mode):
     """Runs one iteration in separate thread, logs and checkpoints results.
 
     Same as parent Runner implementation except that summary statistics are
@@ -634,22 +634,22 @@ class AsyncRunner(Runner):
       iteration: int, current iteration number, used as a global_step for saving
         Tensorboard summaries.
       lock: Semaphore object, to release once the iteration is completed.
-      eval: bool, whether this is an evaluation iteration.
+      eval_mode: bool, whether this is an evaluation iteration.
     """
     statistics = iteration_statistics.IterationStatistics()
     iteration_name = '{}iteration {}'.format(
-        'eval ' if eval else '', iteration)
+        'eval ' if eval_mode else '', iteration)
     tf.logging.info('Starting %s.', iteration_name)
-    run_phase = self._run_eval_phase if eval else self._run_train_phase
+    run_phase = self._run_eval_phase if eval_mode else self._run_train_phase
     num_episodes, average_reward = run_phase(statistics)
     with self._output_lock:
       self._log_experiment(
           self._completed_iteration, statistics,
-          suffix='_eval' if eval else '')
+          suffix='_eval' if eval_mode else '')
       self._save_tensorboard_summaries(
           self._completed_iteration, num_episodes, average_reward,
-          tag='Eval' if eval else 'Train')
-      if not eval:
+          tag='Eval' if eval_mode else 'Train')
+      if not eval_mode:
         self._checkpoint_experiment(self._completed_iteration)
         self._completed_iteration += 1
     tf.logging.info('Completed %s.', iteration_name)
