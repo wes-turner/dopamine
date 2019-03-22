@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for run_experiment_test.py."""
+"""Tests for async trainer in `run_experiment_test.py`."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -23,6 +23,7 @@ import threading
 from absl.testing import parameterized
 from dopamine.discrete_domains import run_experiment
 from dopamine.utils import test_utils
+import tensorflow as tf
 from tensorflow import test
 
 
@@ -87,6 +88,26 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     runner.run_experiment()
     self.assertEqual(mock_semaphore.acquire.call_count, expected_call_count)
     self.assertEqual(mock_semaphore.release.call_count, expected_call_count)
+
+  @test.mock.patch.object(tf, 'Summary')
+  def testTFSummary(self, summary):
+    runner = run_experiment.AsyncRunner(
+        base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
+        create_environment_fn=_get_mock_environment_fn(),
+        num_iterations=2, training_steps=1, evaluation_steps=0,
+        max_simultaneous_iterations=2)
+    runner._checkpoint_experiment = test.mock.Mock()
+    runner._log_experiment = test.mock.Mock()
+    runner._summary_writer = test.mock.Mock()
+    runner.run_experiment()
+    self.assertCountEqual(
+        summary.Value.call_args_list,
+        [test.mock.call(simple_value=0, tag='Eval/NumEpisodes'),
+         test.mock.call(simple_value=0, tag='Eval/AverageReturns'),
+         test.mock.call(simple_value=1, tag='Train/NumEpisodes'),
+         test.mock.call(simple_value=0, tag='Train/AverageReturns'),
+         test.mock.call(simple_value=1, tag='Train/NumEpisodes'),
+         test.mock.call(simple_value=0, tag='Train/AverageReturns'),])
 
 
 class InternalIterationCounterTest(test.TestCase):
