@@ -445,14 +445,15 @@ class Runner(object):
     ])
     self._summary_writer.add_summary(summary, iteration)
 
-  def _log_experiment(self, iteration, statistics):
+  def _log_experiment(self, iteration, statistics, suffix=''):
     """Records the results of the current iteration.
 
     Args:
       iteration: int, iteration number.
       statistics: `IterationStatistics` object containing statistics to log.
+      suffix: string, suffix to add to the logging key.
     """
-    self._logger['iteration_{:d}'.format(iteration)] = statistics
+    self._logger['iteration_{:d}{}'.format(iteration, suffix)] = statistics
     if iteration % self._log_every_n == 0:
       self._logger.log_to_file(self._logging_file_prefix, iteration)
 
@@ -589,6 +590,8 @@ class AsyncRunner(Runner):
     threading_utils.initialize_local_attributes(
         self, _environment=create_environment_fn)
     self._running_iterations = threading.Semaphore(max_simultaneous_iterations)
+    self._eval_period = max_simultaneous_iterations
+    self._eval_iterations = threading.Semaphore(1)
     self._output_lock = threading.Lock()
 
     super(AsyncRunner, self).__init__(
@@ -609,14 +612,19 @@ class AsyncRunner(Runner):
     threads = []
     self._completed_iteration = self._start_iteration
     for iteration in range(self._start_iteration, self._num_iterations):
+      if iteration % self._eval_period == 0:
+        self._eval_iterations.acquire()
+        threads.append(self._run_one_iteration(
+            iteration, self._eval_iterations, eval=True))
       self._running_iterations.acquire()
-      threads.append(self._run_one_iteration(iteration))
+      threads.append(self._run_one_iteration(
+          iteration, self._running_iterations))
     # Wait for all running iterations to complete.
     for thread in threads:
       thread.join()
 
   @threaded_method
-  def _run_one_iteration(self, iteration):
+  def _run_one_iteration(self, iteration, lock, eval=False):
     """Runs one iteration in separate thread, logs and checkpoints results.
 
     Same as parent Runner implementation except that summary statistics are
@@ -624,20 +632,36 @@ class AsyncRunner(Runner):
 
     Args:
       iteration: int, current iteration number, used as a global_step for saving
-        Tensorboard summaries
+        Tensorboard summaries.
+      lock:
+      eval:
     """
     statistics = iteration_statistics.IterationStatistics()
-    tf.logging.info('Starting iteration %d', iteration)
-    num_episodes_train, average_reward_train = self._run_train_phase(
-        statistics)
-    num_episodes_eval, average_reward_eval = self._run_eval_phase(
-        statistics)
+    iteration_name = '{}iteration {}'.format(
+        'eval ' if eval else '', iteration)
+    tf.logging.info('Starting %s.', iteration_name)
+    run_phase = self._run_eval_phase if eval else self._run_train_phase
+    num_episodes, average_reward = run_phase(statistics)
     with self._output_lock:
-      self._log_experiment(self._completed_iteration, statistics)
-      self._checkpoint_experiment(self._completed_iteration)
+      self._log_experiment(
+          self._completed_iteration, statistics,
+          suffix='_eval' if eval else '')
       self._save_tensorboard_summaries(
-          self._completed_iteration, num_episodes_train, average_reward_train,
-          num_episodes_eval, average_reward_eval)
-      self._completed_iteration += 1
-    tf.logging.info('Completed iteration %d.', iteration)
-    self._running_iterations.release()
+          self._completed_iteration, num_episodes, average_reward,
+          tag='Eval' if eval else 'Train')
+      if not eval:
+        self._checkpoint_experiment(self._completed_iteration)
+        self._completed_iteration += 1
+    tf.logging.info('Completed %s.', iteration_name)
+    lock.release()
+
+  def _save_tensorboard_summaries(self, iteration, num_episodes,
+                                  average_reward, tag):
+    """Save statistics as tensorboard summaries."""
+    summary = tf.Summary(value=[
+        tf.Summary.Value(
+            tag='{}/NumEpisodes'.format(tag), simple_value=num_episodes),
+        tf.Summary.Value(
+            tag='{}/AverageReturns'.format(tag), simple_value=average_reward),
+    ])
+    self._summary_writer.add_summary(summary, iteration)
