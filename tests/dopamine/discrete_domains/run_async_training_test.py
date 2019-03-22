@@ -71,7 +71,7 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     runner.run_experiment()
     self.assertEqual(mock_agent.begin_episode.call_count, 18)
 
-  @parameterized.parameters([(1, 2), (2, 3), (3, 4), (4, 6)])
+  @parameterized.parameters([(1, 1), (2, 2), (3, 4), (4, 5)])
   @test.mock.patch.object(threading, 'Semaphore')
   def testMultipleIterationManagement(
       self, iterations, expected_call_count, semaphore):
