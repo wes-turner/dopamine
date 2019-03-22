@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import threading
 
+from absl.testing import parameterized
 from dopamine.discrete_domains import run_experiment
 from dopamine.utils import test_utils
 from tensorflow import test
@@ -31,7 +32,7 @@ def _get_mock_environment_fn():
   return test.mock.MagicMock(return_value=mock_env)
 
 
-class AsyncRunnerTest(test.TestCase):
+class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
   """Tests for asynchronous trainer."""
 
   def testEnvironmentInitializationPerThread(self):
@@ -69,20 +70,23 @@ class AsyncRunnerTest(test.TestCase):
     runner.run_experiment()
     self.assertEqual(mock_agent.begin_episode.call_count, 18)
 
+  @parameterized.parameters([(1, 2), (2, 3), (3, 4), (4, 6)])
   @test.mock.patch.object(threading, 'Semaphore')
-  def testMultipleIterationManagement(self, semaphore):
+  def testMultipleIterationManagement(
+      self, iterations, expected_call_count, semaphore):
     mock_semaphore = test.mock.Mock()
     semaphore.return_value = mock_semaphore
     runner = run_experiment.AsyncRunner(
         base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
-        create_environment_fn=_get_mock_environment_fn(), num_iterations=1,
-        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
+        create_environment_fn=_get_mock_environment_fn(),
+        num_iterations=iterations, training_steps=1, evaluation_steps=0,
+        max_simultaneous_iterations=3)
     runner._checkpoint_experiment = test.mock.Mock()
     runner._log_experiment = test.mock.Mock()
     runner._save_tensorboard_summaries = test.mock.Mock()
     runner.run_experiment()
-    self.assertEqual(mock_semaphore.acquire.call_count, 2)
-    self.assertEqual(mock_semaphore.release.call_count, 2)
+    self.assertEqual(mock_semaphore.acquire.call_count, expected_call_count)
+    self.assertEqual(mock_semaphore.release.call_count, expected_call_count)
 
 
 class InternalIterationCounterTest(test.TestCase):
