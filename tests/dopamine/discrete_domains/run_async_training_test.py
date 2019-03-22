@@ -81,8 +81,8 @@ class AsyncRunnerTest(test.TestCase):
     runner._log_experiment = test.mock.Mock()
     runner._save_tensorboard_summaries = test.mock.Mock()
     runner.run_experiment()
-    mock_semaphore.acquire.assert_called_once()
-    mock_semaphore.release.assert_called_once()
+    self.assertEqual(mock_semaphore.acquire.call_count, 2)
+    self.assertEqual(mock_semaphore.release.call_count, 2)
 
 
 class InternalIterationCounterTest(test.TestCase):
@@ -101,7 +101,7 @@ class InternalIterationCounterTest(test.TestCase):
 
   def testCounterUsed(self):
     self.runner._completed_iteration = 20
-    self.runner._run_one_iteration(36).join()
+    self.runner._run_one_iteration(36, test.mock.Mock(), False).join()
     self.runner._checkpoint_experiment.assert_called_once_with(20)
 
   def testCounterInitialized(self):
@@ -110,7 +110,7 @@ class InternalIterationCounterTest(test.TestCase):
 
   def testCounterIncremented(self):
     self.runner._completed_iteration = 20
-    self.runner._run_one_iteration(36).join()
+    self.runner._run_one_iteration(36, test.mock.Mock(), False).join()
     self.assertEqual(self.runner._completed_iteration, 21)
 
 

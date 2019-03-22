@@ -615,16 +615,16 @@ class AsyncRunner(Runner):
       if iteration % self._eval_period == 0:
         self._eval_iterations.acquire()
         threads.append(self._run_one_iteration(
-            iteration, self._eval_iterations, eval=True))
+            iteration, self._eval_iterations, True))
       self._running_iterations.acquire()
       threads.append(self._run_one_iteration(
-          iteration, self._running_iterations))
+          iteration, self._running_iterations, False))
     # Wait for all running iterations to complete.
     for thread in threads:
       thread.join()
 
   @threaded_method
-  def _run_one_iteration(self, iteration, lock, eval=False):
+  def _run_one_iteration(self, iteration, lock, eval):
     """Runs one iteration in separate thread, logs and checkpoints results.
 
     Same as parent Runner implementation except that summary statistics are
