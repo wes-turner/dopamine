@@ -554,23 +554,6 @@ class TrainRunner(Runner):
     self._summary_writer.add_summary(summary, iteration)
 
 
-def threaded_method(method):
-  """Wraps a class method to run in a separate thread.
-
-  Args:
-    method: A class method taking positional arguments.
-
-  Returns:
-    A method with the same signature, that will run in a separate thread in a
-    non blocking manner.
-  """
-  def _method(*args):
-    thread = threading.Thread(target=method, args=args)
-    thread.start()
-    return thread
-  return _method
-
-
 @threading_utils.local_attributes(['_environment'])
 @gin.configurable
 class AsyncRunner(Runner):
@@ -620,7 +603,7 @@ class AsyncRunner(Runner):
     for thread in threads:
       thread.join()
 
-  @threaded_method
+  @threading_utils.threaded_method
   def _run_one_iteration(self, iteration):
     """Runs one iteration in separate thread, logs and checkpoints results.
 
