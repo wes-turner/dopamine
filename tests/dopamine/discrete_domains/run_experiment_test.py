@@ -444,8 +444,9 @@ class RunnerTest(tf.test.TestCase, parameterized.TestCase):
     glob_string = '{}/events.out.tfevents.*'.format(self._test_subdir)
     self.assertGreater(len(tf.gfile.Glob(glob_string)), 0)
 
-  @parameterized.parameters([
-      (None, 4, 4), ((None, 1), 4, 1), ((-1, None), -4, -1)])
+  @parameterized.named_parameters(
+      ('no_clipping', None, 4, 4), ('positive', (None, 1), 4, 1),
+      ('negative', (-1, None), -4, -1), ('unclipped', (1, None), 4, 4))
   def testRewardClipping(self, reward_clipping, reward, expected_reward):
     environment = tf.test.mock.Mock()
     environment.step.return_value = (0, reward, True, {})
