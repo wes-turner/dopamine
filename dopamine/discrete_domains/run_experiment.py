@@ -145,7 +145,8 @@ class Runner(object):
                num_iterations=200,
                training_steps=250000,
                evaluation_steps=125000,
-               max_steps_per_episode=27000):
+               max_steps_per_episode=27000,
+               reward_clipping=(-1, 1)):
     """Initialize the Runner object in charge of running a full experiment.
 
     Args:
@@ -163,6 +164,8 @@ class Runner(object):
       evaluation_steps: int, the number of evaluation steps to perform.
       max_steps_per_episode: int, maximum number of steps after which an episode
         terminates.
+      reward_clipping: Tuple(int, int), with the minimum and maximum bounds for
+        reward at each step. If `None` no clipping is applied.
 
     This constructor will take the following actions:
     - Initialize an environment.
@@ -195,6 +198,7 @@ class Runner(object):
     self._sess.run(tf.global_variables_initializer())
 
     self._initialize_checkpointer_and_maybe_resume(checkpoint_file_prefix)
+    self._reward_clipping = reward_clipping
 
   def _create_directories(self):
     """Create necessary sub-directories."""
@@ -291,7 +295,9 @@ class Runner(object):
       step_number += 1
 
       # Perform reward clipping.
-      reward = np.clip(reward, -1, 1)
+      if self._reward_clipping:
+        min_bound, max_bound = self._reward_clipping
+        reward = np.clip(reward, min_bound, max_bound)
 
       if (self._environment.game_over or
           step_number == self._max_steps_per_episode):
