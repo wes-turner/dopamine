@@ -554,6 +554,8 @@ class TrainRunner(Runner):
     self._summary_writer.add_summary(summary, iteration)
 
 
+# TODO(aarg): Add more details about this runner and the way thread and local
+# variables are managed. This is somewhat hidden to the user.
 @threading_utils.local_attributes(['_environment'])
 @gin.configurable
 class AsyncRunner(Runner):
