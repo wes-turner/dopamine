@@ -559,8 +559,11 @@ class TrainRunner(Runner):
 @threading_utils.local_attributes(['_environment'])
 @gin.configurable
 class AsyncRunner(Runner):
-  """Defines a train runner for asynchronous training."""
+  """Defines a train runner for asynchronous training.
 
+  See `_run_one_iteration` for more details on how iterations are ran
+  asynchronously.
+  """
   def __init__(
       self, base_dir, create_agent_fn,
       create_environment_fn=atari_lib.create_atari_environment,
@@ -597,6 +600,7 @@ class AsyncRunner(Runner):
     time an iteration completes a new one starts until the right number of
     iterations is run.
     """
+    # TODO(aarg): Change the thread management to an implementation with queues.
     threads = []
     for iteration in range(self._start_iteration, self._num_iterations):
       self._running_iterations.acquire()
