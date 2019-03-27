@@ -16,11 +16,23 @@
 
 The `local_attributes` class decorator defines a custom getter, setter and
 deleter for each specified attribute. These getter, setter and deleter actually
-wrap internal attributes that are thread specific.
+wrap internal attributes that are specific to the id of the thread they're
+accessed from.  We call those attributes "thread local".
 
-Each attribute has a callable default value that initializes the local value the
-first time they are called in a thread. To set these default values, use the
-`initialize_local_attributes` helper of this module.
+Each attribute has a callable default value that initializes a thread-local
+variable when it is not bound to a class at the time a caller tries to access
+it.  Typically, this is the first time in a thread that the variable is
+accessed.  Cases where this does not hold:
+
+  - If the thread itself is new but uses a pre-existing thread id, the variable
+    may have already existed earlier, and the default will not be called.
+
+  - If the variable var has at some point been unbound from the class cls (say
+    by calling `del cls.var`, the initializer will again be called if cls.var is
+    later accessed.
+
+To set these default values, use the `initialize_local_attributes` helper of
+this module.
 
 Example of usage:
   ```python
@@ -33,15 +45,6 @@ Example of usage:
   obj = MyClass('default-value')
   assert obj.attr == 'default-value'
   ```
-
-More precisely, for each attribute specified by the user, we create internal
-attributes that have a name specific to each thread. The custom getter, setter,
-and deleter access these internal attributes by providing the name of the
-current thread.
-To each specified attribute can also be associated a global default value
-initializer that is stored as another internal attribute and that specifies
-which is the initial local value of the attribute in a new thread. This default
-value can be set at the object initialization.
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -51,11 +54,11 @@ import threading
 
 
 def _get_internal_name(name):
-  """Returns the internal thread local name of an attribute.
+  """Returns the internal thread local name of an attribute based on its id.
 
   For each specified attribute, we create an attribute whose name depends on
-  the current thread to store thread local value for that attribute. This
-  method provides the name of this thread specific attribute.
+  the current thread's id to store thread-local value for that attribute. This
+  method provides the name of this thread-specific attribute.
 
   Args:
     name: str, name of the exposed attribute.
@@ -86,8 +89,9 @@ def _add_property(cls, attr_name):
 
   The setter, getter and deleter are added to the given class and correspond to
   the provided attribute name.
-  These methods actually apply to an internal variable that is thread-specific.
-  Hence the result of these methods depends on the local thread.
+
+  These methods actually apply to an internal variable that is thread-local.
+  Hence the result of these methods depends on the local thread's id.
 
   Note that when the getter is called and the local attribute is not found the
   getter will initialize the local value to the global default value.
@@ -110,8 +114,8 @@ def _add_property(cls, attr_name):
   def _get(self):
     """Defines a custom getter for the attribute.
 
-    This getter reads and returns the internal local variable. If this local
-    variable has not been initialized the getter will look for the global
+    This getter reads and returns the internal, thread-local variable. If this
+    local variable has not been bound, the getter will look for the global
     initializer and initialize the local variable.
 
     Returns:
@@ -162,9 +166,11 @@ def initialize_local_attributes(obj, **kwargs):
 
   Each attribute has a global default value initializer and local values that
   are specific to each thread.
-  In each thread, the first time the getter is called it is initialized by
-  calling the global default value initializer. This helper function is to set
-  these default value initializers.
+
+  If an attribute's local name isn't bound to the annotated class (perhaps
+  because this is the first time the attribute's getter is called for a given
+  thread id), it is initialized by calling the global default value initializer.
+  This helper function is to set these default value initializers.
 
   Args:
     obj: The object that has the local attributes.
