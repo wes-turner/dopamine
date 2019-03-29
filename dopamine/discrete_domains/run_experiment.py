@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import os
 import sys
+import threading
 import time
 
 from dopamine.agents.dqn import dqn_agent
@@ -306,7 +307,7 @@ class Runner(object):
       elif is_terminal:
         # If we lose a life but the episode is not over, signal an artificial
         # end of episode to the agent.
-        self._agent.end_episode(reward)
+        self._end_episode(reward)
         action = self._agent.begin_episode(observation)
       else:
         action = self._agent.step(reward, observation)
@@ -474,6 +475,16 @@ class Runner(object):
       experiment_data['logs'] = self._logger.data
       self._checkpointer.save_checkpoint(iteration, experiment_data)
 
+  def _run_iterations(self):
+    """Runs required number of training iterations sequentially.
+
+    Statistics from each iteration are logged and exported for tensorboard.
+    """
+    for iteration in range(self._start_iteration, self._num_iterations):
+      statistics = self._run_one_iteration(iteration)
+      self._log_experiment(iteration, statistics)
+      self._checkpoint_experiment(iteration)
+
   def run_experiment(self):
     """Runs a full experiment, spread over multiple iterations."""
     tf.logging.info('Beginning training...')
@@ -482,10 +493,7 @@ class Runner(object):
                          self._num_iterations, self._start_iteration)
       return
 
-    for iteration in range(self._start_iteration, self._num_iterations):
-      statistics = self._run_one_iteration(iteration)
-      self._log_experiment(iteration, statistics)
-      self._checkpoint_experiment(iteration)
+    self._run_iterations()
 
 
 @gin.configurable
@@ -546,13 +554,20 @@ class TrainRunner(Runner):
     self._summary_writer.add_summary(summary, iteration)
 
 
+# TODO(aarg): Add more details about this runner and the way thread and local
+# variables are managed. This is somewhat hidden to the user.
 @threading_utils.local_attributes(['_environment'])
+@gin.configurable
 class AsyncRunner(Runner):
-  """Defines a train runner for asynchronous training."""
+  """Defines a train runner for asynchronous training.
 
+  See `_run_one_iteration` for more details on how iterations are ran
+  asynchronously.
+  """
   def __init__(
       self, base_dir, create_agent_fn,
-      create_environment_fn=atari_lib.create_atari_environment, **kwargs):
+      create_environment_fn=atari_lib.create_atari_environment,
+      max_simultaneous_iterations=1, **kwargs):
     """Creates an asynchronous runner.
 
     Args:
@@ -561,10 +576,55 @@ class AsyncRunner(Runner):
         environment, and returns an agent.
       create_environment_fn: A function which receives a problem name and
         creates a Gym environment for that problem (e.g. an Atari 2600 game).
+      max_simultaneous_iterations: int, maximum number of iterations running
+        simultaneously in separate threads.
       **kwargs: Additional positional arguments.
     """
     threading_utils.initialize_local_attributes(
         self, _environment=create_environment_fn)
+    self._running_iterations = threading.Semaphore(max_simultaneous_iterations)
+    self._output_lock = threading.Lock()
+
     super(AsyncRunner, self).__init__(
         base_dir=base_dir, create_agent_fn=create_agent_fn,
         create_environment_fn=create_environment_fn, **kwargs)
+
+  # TODO(aarg): Decouple experience generation from training.
+  def _run_iterations(self):
+    """Runs required number of training iterations sequentially.
+
+    Statistics from each iteration are logged and exported for tensorboard.
+
+    Iterations are run in multiple threads simultaneously (number of
+    simultaneous threads is specified by `max_simultaneous_iterations`). Each
+    time an iteration completes a new one starts until the right number of
+    iterations is run.
+    """
+    # TODO(aarg): Change the thread management to an implementation with queues.
+    threads = []
+    for iteration in range(self._start_iteration, self._num_iterations):
+      self._running_iterations.acquire()
+      thread = threading.Thread(
+          target=self._run_one_iteration, args=(iteration,))
+      thread.start()
+      threads.append(thread)
+    # Wait for all running iterations to complete.
+    for thread in threads:
+      thread.join()
+
+  def _run_one_iteration(self, iteration):
+    """Runs one iteration in separate thread, logs and checkpoints results.
+
+    Same as parent Runner implementation except that summary statistics are
+    directly logged instead of being returned.
+
+    Args:
+      iteration: int, current iteration number, used as a global_step for saving
+        Tensorboard summaries
+    """
+    statistics = super(AsyncRunner, self)._run_one_iteration(iteration)
+    with self._output_lock:
+      self._log_experiment(iteration, statistics)
+      self._checkpoint_experiment(iteration)
+    tf.logging.info('Completed iteration %d.', iteration)
+    self._running_iterations.release()

@@ -18,9 +18,17 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import threading
+
 from dopamine.discrete_domains import run_experiment
 from dopamine.utils import test_utils
 from tensorflow import test
+
+
+def _get_mock_environment_fn():
+  mock_env = test.mock.Mock()
+  mock_env.step.return_value = (0, 0, True, {})
+  return test.mock.MagicMock(return_value=mock_env)
 
 
 class AsyncRunnerTest(test.TestCase):
@@ -33,24 +41,48 @@ class AsyncRunnerTest(test.TestCase):
     runner initialization. In synchronous model, `create_environment_fn` is
     called for each new iteration.
     """
-    mock_env = test.mock.Mock()
-    mock_env.step.return_value = (0, 0, True, {})
-    environment_fn = test.mock.MagicMock(return_value=mock_env)
+    environment_fn = _get_mock_environment_fn()
 
     runner = run_experiment.AsyncRunner(
         base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
         create_environment_fn=environment_fn, num_iterations=1,
-        training_steps=1, evaluation_steps=1)
+        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
     runner._checkpoint_experiment = test.mock.Mock()
-    runner.run_experiment()
-    runner.run_experiment()
-    # Environment initialized only once in this thread.
+    runner._log_experiment = test.mock.Mock()
+    # Environment called once in init.
     environment_fn.assert_called_once()
-    runner.run_experiment()
     with test_utils.mock_thread('other-thread'):
       runner.run_experiment()
-    # Environment initialized a second time in 'other-thread'.
-    self.assertEqual(environment_fn.call_count, 2)
+    runner.run_experiment()
+    self.assertEqual(environment_fn.call_count, 3)
+
+  def testNumIterations(self):
+    mock_agent = test.mock.Mock()
+    agent_fn = test.mock.MagicMock(return_value=mock_agent)
+    runner = run_experiment.AsyncRunner(
+        base_dir=self.get_temp_dir(), create_agent_fn=agent_fn,
+        create_environment_fn=_get_mock_environment_fn(), num_iterations=18,
+        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
+    runner._checkpoint_experiment = test.mock.Mock()
+    runner._log_experiment = test.mock.Mock()
+    runner._save_tensorboard_summaries = test.mock.Mock()
+    runner.run_experiment()
+    self.assertEqual(mock_agent.begin_episode.call_count, 18)
+
+  @test.mock.patch.object(threading, 'Semaphore')
+  def testMultipleIterationManagement(self, semaphore):
+    mock_semaphore = test.mock.Mock()
+    semaphore.return_value = mock_semaphore
+    runner = run_experiment.AsyncRunner(
+        base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
+        create_environment_fn=_get_mock_environment_fn(), num_iterations=1,
+        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
+    runner._checkpoint_experiment = test.mock.Mock()
+    runner._log_experiment = test.mock.Mock()
+    runner._save_tensorboard_summaries = test.mock.Mock()
+    runner.run_experiment()
+    mock_semaphore.acquire.assert_called_once()
+    mock_semaphore.release.assert_called_once()
 
 
 if __name__ == '__main__':
