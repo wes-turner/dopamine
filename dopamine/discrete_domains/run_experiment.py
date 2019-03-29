@@ -475,7 +475,7 @@ class Runner(object):
       experiment_data['logs'] = self._logger.data
       self._checkpointer.save_checkpoint(iteration, experiment_data)
 
-  def _run_experiment_loop(self):
+  def _run_iterations(self):
     """Runs required number of training iterations sequentially.
 
     Statistics from each iteration are logged and exported for tensorboard.
@@ -493,7 +493,7 @@ class Runner(object):
                          self._num_iterations, self._start_iteration)
       return
 
-    self._run_experiment_loop()
+    self._run_iterations()
 
 
 @gin.configurable
@@ -590,7 +590,7 @@ class AsyncRunner(Runner):
         create_environment_fn=create_environment_fn, **kwargs)
 
   # TODO(aarg): Decouple experience generation from training.
-  def _run_experiment_loop(self):
+  def _run_iterations(self):
     """Runs required number of training iterations sequentially.
 
     Statistics from each iteration are logged and exported for tensorboard.
