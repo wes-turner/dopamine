@@ -632,8 +632,8 @@ class AsyncRunner(Runner):
     num_episodes_eval, average_reward_eval = self._run_eval_phase(
         statistics)
     with self._output_lock:
-      self._log_experiment(self._completed_iteration, statistics)
       self._checkpoint_experiment(self._completed_iteration)
+      self._log_experiment(self._completed_iteration, statistics)
       self._save_tensorboard_summaries(
           self._completed_iteration, num_episodes_train, average_reward_train,
           num_episodes_eval, average_reward_eval)
