@@ -739,7 +739,8 @@ class WrappedReplayBuffer(object):
                action_shape=(),
                action_dtype=np.int32,
                reward_shape=(),
-               reward_dtype=np.float32):
+               reward_dtype=np.float32,
+               use_contiguous_trajectories=False):
     """Initializes WrappedReplayBuffer.
 
     Args:
@@ -765,6 +766,13 @@ class WrappedReplayBuffer(object):
       reward_shape: tuple of ints, the shape of the reward vector. Empty tuple
         means the reward is a scalar.
       reward_dtype: np.dtype, type of elements in the reward.
+      use_contiguous_trajectories: bool, whether to enforce that trajectories
+        are stored contiguously in memory (e.g. have `AAABBB` instead of
+        `ABABAB` when two trajectories A and B are being written
+        simultaneously). If `True`, a trajectory is only added to the memory
+        when complete, otherwise transitions are directly added to the memory
+        which can lead trajectories to overlap when trajectories are being
+        written simultaneously (in multiple threads).
 
     Raises:
       ValueError: If update_horizon is not positive.
@@ -798,7 +806,8 @@ class WrappedReplayBuffer(object):
           action_shape=action_shape,
           action_dtype=action_dtype,
           reward_shape=reward_shape,
-          reward_dtype=reward_dtype)
+          reward_dtype=reward_dtype,
+          use_contiguous_trajectories=use_contiguous_trajectories)
 
     self.create_sampling_ops(use_staging)
 

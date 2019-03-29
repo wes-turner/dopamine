@@ -18,10 +18,7 @@ import datetime
 import os
 import shutil
 
-
-
 from absl import flags
-
 from dopamine.discrete_domains import train
 import tensorflow as tf
 
@@ -44,13 +41,14 @@ class TrainRunnerIntegrationTest(tf.test.TestCase):
     """Assign flags for a quick run of DQN agent."""
     FLAGS.gin_files = ['dopamine/agents/dqn/configs/dqn.gin']
     FLAGS.gin_bindings = [
-        "create_runner.schedule='continuous_train'",
+        "create_runner.schedule='async_train'",
         'Runner.training_steps=100',
         'Runner.evaluation_steps=10',
         'Runner.num_iterations=1',
         'Runner.max_steps_per_episode=100',
         'dqn_agent.DQNAgent.min_replay_history=500',
-        'WrappedReplayBuffer.replay_capacity=100'
+        'WrappedReplayBuffer.replay_capacity=100',
+        'WrappedReplayBuffer.use_contiguous_trajectories=True'
     ]
     FLAGS.alsologtostderr = True
 
@@ -68,7 +66,7 @@ class TrainRunnerIntegrationTest(tf.test.TestCase):
     # Check log files
     self.assertTrue(os.path.exists(os.path.join(self._logging_dir, 'log_0')))
 
-  def testIntegrationDqn(self):
+  def testIntegrationAsyncDqn(self):
     """Test the DQN agent."""
     tf.logging.info('####### Training the DQN agent #####')
     tf.logging.info('####### DQN base_dir: {}'.format(FLAGS.base_dir))
