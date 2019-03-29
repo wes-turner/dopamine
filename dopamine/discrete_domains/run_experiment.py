@@ -146,7 +146,8 @@ class Runner(object):
                num_iterations=200,
                training_steps=250000,
                evaluation_steps=125000,
-               max_steps_per_episode=27000):
+               max_steps_per_episode=27000,
+               reward_clipping=(-1, 1)):
     """Initialize the Runner object in charge of running a full experiment.
 
     Args:
@@ -164,6 +165,8 @@ class Runner(object):
       evaluation_steps: int, the number of evaluation steps to perform.
       max_steps_per_episode: int, maximum number of steps after which an episode
         terminates.
+      reward_clipping: Tuple(int, int), with the minimum and maximum bounds for
+        reward at each step. If `None` no clipping is applied.
 
     This constructor will take the following actions:
     - Initialize an environment.
@@ -196,6 +199,7 @@ class Runner(object):
     self._sess.run(tf.global_variables_initializer())
 
     self._initialize_checkpointer_and_maybe_resume(checkpoint_file_prefix)
+    self._reward_clipping = reward_clipping
 
   def _create_directories(self):
     """Create necessary sub-directories."""
@@ -292,7 +296,9 @@ class Runner(object):
       step_number += 1
 
       # Perform reward clipping.
-      reward = np.clip(reward, -1, 1)
+      if self._reward_clipping:
+        min_bound, max_bound = self._reward_clipping
+        reward = np.clip(reward, min_bound, max_bound)
 
       if (self._environment.game_over or
           step_number == self._max_steps_per_episode):
@@ -469,7 +475,7 @@ class Runner(object):
       experiment_data['logs'] = self._logger.data
       self._checkpointer.save_checkpoint(iteration, experiment_data)
 
-  def _run_experiment_loop(self):
+  def _run_iterations(self):
     """Runs required number of training iterations sequentially.
 
     Statistics from each iteration are logged and exported for tensorboard.
@@ -487,7 +493,7 @@ class Runner(object):
                          self._num_iterations, self._start_iteration)
       return
 
-    self._run_experiment_loop()
+    self._run_iterations()
 
 
 @gin.configurable
@@ -548,28 +554,16 @@ class TrainRunner(Runner):
     self._summary_writer.add_summary(summary, iteration)
 
 
-def threaded_method(method):
-  """Wraps a class method to run in a separate thread.
-
-  Args:
-    method: A class method taking positional arguments.
-
-  Returns:
-    A method with the same signature, that will run in a separate thread in a
-    non blocking manner.
-  """
-  def _method(*args):
-    thread = threading.Thread(target=method, args=args)
-    thread.start()
-    return thread
-  return _method
-
-
+# TODO(aarg): Add more details about this runner and the way thread and local
+# variables are managed. This is somewhat hidden to the user.
 @threading_utils.local_attributes(['_environment'])
 @gin.configurable
 class AsyncRunner(Runner):
-  """Defines a train runner for asynchronous training."""
+  """Defines a train runner for asynchronous training.
 
+  See `_run_one_iteration` for more details on how iterations are ran
+  asynchronously.
+  """
   def __init__(
       self, base_dir, create_agent_fn,
       create_environment_fn=atari_lib.create_atari_environment,
@@ -596,7 +590,7 @@ class AsyncRunner(Runner):
         create_environment_fn=create_environment_fn, **kwargs)
 
   # TODO(aarg): Decouple experience generation from training.
-  def _run_experiment_loop(self):
+  def _run_iterations(self):
     """Runs required number of training iterations sequentially.
 
     Statistics from each iteration are logged and exported for tensorboard.
@@ -606,15 +600,18 @@ class AsyncRunner(Runner):
     time an iteration completes a new one starts until the right number of
     iterations is run.
     """
+    # TODO(aarg): Change the thread management to an implementation with queues.
     threads = []
     for iteration in range(self._start_iteration, self._num_iterations):
       self._running_iterations.acquire()
-      threads.append(self._run_one_iteration(iteration))
+      thread = threading.Thread(
+          target=self._run_one_iteration, args=(iteration,))
+      thread.start()
+      threads.append(thread)
     # Wait for all running iterations to complete.
     for thread in threads:
       thread.join()
 
-  @threaded_method
   def _run_one_iteration(self, iteration):
     """Runs one iteration in separate thread, logs and checkpoints results.
 
