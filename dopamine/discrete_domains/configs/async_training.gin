@@ -1,0 +1,8 @@
+import dopamine.discrete_domains.gym_lib
+import dopamine.discrete_domains.run_experiment
+import dopamine.replay_memory.circular_replay_buffer
+
+create_runner.schedule = 'async_train'
+AsyncRunner.create_environment_fn = @gym_lib.create_gym_environment
+AsyncRunner.max_simultaneous_iterations = 3
+WrappedReplayBuffer.use_contiguous_trajectories = True

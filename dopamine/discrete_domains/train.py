@@ -38,7 +38,6 @@ flags.DEFINE_multi_string(
     'Gin bindings to override the values set in the config files '
     '(e.g. "DQNAgent.epsilon_train=0.1",'
     '      "create_environment.game_name="Pong"").')
-flags.DEFINE_boolean('async', False, 'Whether to use asynchronous training.')
 
 FLAGS = flags.FLAGS
 
@@ -50,13 +49,8 @@ def main(unused_argv):
     unused_argv: Arguments (unused).
   """
   tf.logging.set_verbosity(tf.logging.INFO)
-  # TODO(#124): Refactor to work with gin bindings.
-  if FLAGS.async:
-    runner = run_experiment.create_runner(
-        FLAGS.base_dir, schedule='async_train')
-  else:
-    run_experiment.load_gin_configs(FLAGS.gin_files, FLAGS.gin_bindings)
-    runner = run_experiment.create_runner(FLAGS.base_dir)
+  run_experiment.load_gin_configs(FLAGS.gin_files, FLAGS.gin_bindings)
+  runner = run_experiment.create_runner(FLAGS.base_dir)
   runner.run_experiment()
 
 

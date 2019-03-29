@@ -200,6 +200,20 @@ python -um dopamine.discrete_domains.train \
   --gin_files='dopamine/agents/rainbow/configs/rainbow_acrobot.gin'
 ```
 
+Normal CartPole training:
+```
+python -m dopamine.discrete_domains.train \
+--gin_files="dopamine/agents/dqn/configs/dqn_cartpole.gin" \
+--base_dir=models/model_$(date +%Y%m%d%H%M%S)
+```
+
+Asynchronous CartPole training:
+```
+python -m dopamine.discrete_domains.train \
+--gin_files="dopamine/agents/dqn/configs/dqn_cartpole.gin" \
+--gin_files="dopamine/discrete_domains/configs/async_training.gin" \
+--base_dir=models/model_$(date +%Y%m%d%H%M%S)
+```
 
 ### Install as a library
 An easy, alternative way to install Dopamine is as a Python library:
