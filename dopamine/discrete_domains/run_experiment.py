@@ -602,6 +602,8 @@ class AsyncRunner(Runner):
     """
     # TODO(aarg): Change the thread management to an implementation with queues.
     threads = []
+    # TODO(westurner): See how to refactor the code to avoid setting an internal
+    # attribute.
     self._completed_iteration = self._start_iteration
     for iteration in range(self._start_iteration, self._num_iterations):
       self._running_iterations.acquire()
