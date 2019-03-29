@@ -179,20 +179,3 @@ def initialize_local_attributes(obj, **kwargs):
       raise AttributeError(
           'Object `{}` already has a `{}` attribute.'.format(obj, default_attr))
     setattr(obj, default_attr, val)
-
-
-def threaded_method(method):
-  """Wraps a class method to run in a separate thread.
-
-  Args:
-    method: A class method taking positional arguments.
-
-  Returns:
-    A method with the same signature, that will run in a separate thread in a
-    non blocking manner.
-  """
-  def _method(*args):
-    thread = threading.Thread(target=method, args=args)
-    thread.start()
-    return thread
-  return _method

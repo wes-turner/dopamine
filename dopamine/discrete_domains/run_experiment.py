@@ -604,12 +604,14 @@ class AsyncRunner(Runner):
     threads = []
     for iteration in range(self._start_iteration, self._num_iterations):
       self._running_iterations.acquire()
-      threads.append(self._run_one_iteration(iteration))
+      thread = threading.Thread(
+          target=self._run_one_iteration, args=(iteration,))
+      thread.start()
+      threads.append(thread)
     # Wait for all running iterations to complete.
     for thread in threads:
       thread.join()
 
-  @threading_utils.threaded_method
   def _run_one_iteration(self, iteration):
     """Runs one iteration in separate thread, logs and checkpoints results.
 
