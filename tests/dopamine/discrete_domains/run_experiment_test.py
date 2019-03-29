@@ -22,6 +22,7 @@ import os
 import shutil
 
 from absl import flags
+from absl.testing import parameterized
 from dopamine.agents.dqn import dqn_agent
 from dopamine.agents.implicit_quantile import implicit_quantile_agent
 from dopamine.agents.rainbow import rainbow_agent
@@ -190,7 +191,7 @@ class RunExperimentTest(tf.test.TestCase):
     self.assertEqual(mock_create_agent, mock_args[1])
 
 
-class RunnerTest(tf.test.TestCase):
+class RunnerTest(tf.test.TestCase, parameterized.TestCase):
 
   def _agent_step(self, reward, observation):
     # We verify that rewards are clipped (and set by MockEnvironment as a
@@ -442,6 +443,26 @@ class RunnerTest(tf.test.TestCase):
     self.assertEqual(num_iterations, experiment_logger._calls_to_log)
     glob_string = '{}/events.out.tfevents.*'.format(self._test_subdir)
     self.assertGreater(len(tf.gfile.Glob(glob_string)), 0)
+
+  @parameterized.named_parameters(
+      ('no_clipping', None, 4, 4), ('positive', (None, 1), 4, 1),
+      ('negative', (-1, None), -4, -1), ('unclipped', (1, None), 4, 4))
+  def testRewardClipping(self, reward_clipping, reward, expected_reward):
+    environment = tf.test.mock.Mock()
+    environment.step.return_value = (0, reward, True, {})
+    mock_agent = tf.test.mock.Mock()
+    agent_fn = tf.test.mock.MagicMock(return_value=mock_agent)
+    runner = run_experiment.Runner(
+        self.get_temp_dir(), agent_fn, lambda: environment,
+        log_every_n=1,
+        num_iterations=1,
+        training_steps=1,
+        evaluation_steps=0,
+        reward_clipping=reward_clipping)
+    runner._checkpoint_experiment = tf.test.mock.Mock()
+    runner._log_experiment = tf.test.mock.Mock()
+    runner.run_experiment()
+    mock_agent.end_episode.assert_called_once_with(expected_reward)
 
 
 if __name__ == '__main__':
