@@ -609,8 +609,9 @@ class AsyncRunner(Runner):
     time an iteration completes a new one starts until the right number of
     iterations is run.
     """
-    # TODO(aarg): Change the thread management to an implementation with queues.
-    # With the revamp, training might go inline to this method.
+    # TODO(aarg): Change the thread management to an implementation with queues
+    # and with a fix number of thread workers. With the revamp, training might
+    # go inline to this method.
     training_worker = threading.Thread(target=self._run_training_steps)
     training_worker.start()
     threads = []
