@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import queue
 import sys
 import threading
 import time
@@ -253,7 +254,7 @@ class Runner(object):
       action: int, the initial action chosen by the agent.
     """
     initial_observation = self._environment.reset()
-    return self._agent.begin_episode(initial_observation)
+    return self._begin_episode(initial_observation)
 
   def _run_one_step(self, action):
     """Executes a single step in the environment.
@@ -275,6 +276,13 @@ class Runner(object):
       reward: float, the last reward from the environment.
     """
     self._agent.end_episode(reward)
+
+  def _begin_episode(self, observation):
+    return self._agent.begin_episode(observation)
+
+  def _step(self, reward, observation):
+    return self._agent.step(reward, observation)
+
 
   def _run_one_episode(self):
     """Executes a full trajectory of the agent interacting with the environment.
@@ -308,9 +316,9 @@ class Runner(object):
         # If we lose a life but the episode is not over, signal an artificial
         # end of episode to the agent.
         self._end_episode(reward)
-        action = self._agent.begin_episode(observation)
+        action = self._begin_episode(observation)
       else:
-        action = self._agent.step(reward, observation)
+        action = self._step(reward, observation)
 
     self._end_episode(reward)
 
@@ -582,8 +590,9 @@ class AsyncRunner(Runner):
     """
     threading_utils.initialize_local_attributes(
         self, _environment=create_environment_fn)
-    self._running_iterations = threading.Semaphore(max_simultaneous_iterations)
     self._output_lock = threading.Lock()
+    self._running_iterations = queue.Queue(max_simultaneous_iterations)
+    self._remaining_training_steps = queue.Queue(max_simultaneous_iterations)
 
     super(AsyncRunner, self).__init__(
         base_dir=base_dir, create_agent_fn=create_agent_fn,
@@ -601,16 +610,52 @@ class AsyncRunner(Runner):
     iterations is run.
     """
     # TODO(aarg): Change the thread management to an implementation with queues.
+    # With the revamp, training might go inline to this method.
+    training_worker = threading.Thread(target=self._run_training_steps)
+    training_worker.start()
     threads = []
     for iteration in range(self._start_iteration, self._num_iterations):
-      self._running_iterations.acquire()
+      self._running_iterations.put(1)
       thread = threading.Thread(
           target=self._run_one_iteration, args=(iteration,))
       thread.start()
       threads.append(thread)
-    # Wait for all running iterations to complete.
+    # Wait for all tasks to complete.
+    self._running_iterations.join()
+    self._remaining_training_steps.join()
+    # Indicate training step thread to stop.
+    self._remaining_training_steps.put(None)
+    # Wait for all running threads to complete.
     for thread in threads:
       thread.join()
+
+  def _begin_episode(self, observation):
+    # Increments training steps and blocks is training is too slow.
+    self._training_step()
+    return self._agent.begin_episode(observation, training=False)
+
+  def _step(self, reward, observation):
+    # Increments training steps and blocks is training is too slow.
+    self._training_step()
+    return self._agent.step(reward, observation, training=False)
+
+  def _training_step(self):
+    """Increments training steps to run and blocks if training is too slow."""
+    # If training is delayed, this will block episode generation until training
+    # catches up. This ensures that training orccurs simultaneously to episode
+    # generation with a constant training step / episode steps ratio.
+    if self._agent.eval_mode:
+      return
+    self._remaining_training_steps.put(1)
+
+  def _run_training_steps(self):
+    """Runs training steps until iterations and training queues are empty."""
+    while True:
+      item = self._remaining_training_steps.get()
+      if item is None:
+        return
+      self._agent._train_step()
+      self._remaining_training_steps.task_done()
 
   def _run_one_iteration(self, iteration):
     """Runs one iteration in separate thread, logs and checkpoints results.
@@ -627,4 +672,5 @@ class AsyncRunner(Runner):
       self._log_experiment(iteration, statistics)
       self._checkpoint_experiment(iteration)
     tf.logging.info('Completed iteration %d.', iteration)
-    self._running_iterations.release()
+    self._running_iterations.get()
+    self._running_iterations.task_done()
