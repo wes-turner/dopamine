@@ -632,6 +632,9 @@ class AsyncRunner(Runner):
     num_episodes_eval, average_reward_eval = self._run_eval_phase(
         statistics)
     with self._output_lock:
+      # The checkpoint ID matches the number of iteration by completion
+      # order. The completed number of iterations is tracked by
+      # `_completed_iteration` and incremented at the end of each iteration.
       self._checkpoint_experiment(self._completed_iteration)
       self._log_experiment(self._completed_iteration, statistics)
       self._save_tensorboard_summaries(
