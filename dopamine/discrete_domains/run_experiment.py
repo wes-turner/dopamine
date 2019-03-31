@@ -657,7 +657,7 @@ class AsyncRunner(Runner):
       if item is None:
         self._remaining_training_steps.task_done()
         return
-      self._agent._train_step()
+      self._agent.train_step()
       self._remaining_training_steps.task_done()
 
   def _run_one_iteration(self, iteration):

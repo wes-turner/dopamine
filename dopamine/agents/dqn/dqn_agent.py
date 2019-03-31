@@ -342,7 +342,7 @@ class DQNAgent(object):
     self._record_observation(observation)
 
     if not self.eval_mode and training:
-      self._train_step()
+      self.train_step()
 
     self.action = self._select_action()
     return self.action
@@ -367,7 +367,7 @@ class DQNAgent(object):
     if not self.eval_mode:
       self._store_transition(self._last_observation, self.action, reward, False)
       if training:
-        self._train_step()
+        self.train_step()
 
     self.action = self._select_action()
     return self.action
@@ -408,7 +408,7 @@ class DQNAgent(object):
       # Choose the action with highest Q-value at the current state.
       return self._sess.run(self._q_argmax, {self.state_ph: self.state})
 
-  def _train_step(self):
+  def train_step(self):
     """Runs a single training step.
 
     Runs a training op if both:
