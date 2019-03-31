@@ -19,7 +19,6 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import queue
 import sys
 import threading
 import time
@@ -34,6 +33,7 @@ from dopamine.discrete_domains import logger
 from dopamine.utils import threading_utils
 import gin.tf
 import numpy as np
+import queue
 import tensorflow as tf
 
 
@@ -282,7 +282,6 @@ class Runner(object):
 
   def _step(self, reward, observation):
     return self._agent.step(reward, observation)
-
 
   def _run_one_episode(self):
     """Executes a full trajectory of the agent interacting with the environment.
@@ -572,6 +571,7 @@ class AsyncRunner(Runner):
   See `_run_one_iteration` for more details on how iterations are ran
   asynchronously.
   """
+
   def __init__(
       self, base_dir, create_agent_fn,
       create_environment_fn=atari_lib.create_atari_environment,
@@ -614,13 +614,14 @@ class AsyncRunner(Runner):
     # go inline to this method.
     training_worker = threading.Thread(target=self._run_training_steps)
     training_worker.start()
-    threads = []
+    threads = [training_worker]
     for iteration in range(self._start_iteration, self._num_iterations):
       self._running_iterations.put(1)
       thread = threading.Thread(
           target=self._run_one_iteration, args=(iteration,))
       thread.start()
       threads.append(thread)
+
     # Wait for all tasks to complete.
     self._running_iterations.join()
     self._remaining_training_steps.join()
@@ -647,13 +648,14 @@ class AsyncRunner(Runner):
     # generation with a constant training step / episode steps ratio.
     if self._agent.eval_mode:
       return
-    self._remaining_training_steps.put(1)
+    self._remaining_training_steps.put(0)  # Value doesn't matter.
 
   def _run_training_steps(self):
     """Runs training steps until iterations and training queues are empty."""
     while True:
       item = self._remaining_training_steps.get()
       if item is None:
+        self._remaining_training_steps.task_done()
         return
       self._agent._train_step()
       self._remaining_training_steps.task_done()
