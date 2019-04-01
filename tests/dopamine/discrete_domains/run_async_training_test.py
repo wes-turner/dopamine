@@ -85,5 +85,34 @@ class AsyncRunnerTest(test.TestCase):
     mock_semaphore.release.assert_called_once()
 
 
+class InternalIterationCounterTest(test.TestCase):
+  """Tests for the iteration internal counter."""
+
+  def setUp(self):
+    runner = run_experiment.AsyncRunner(
+        base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
+        create_environment_fn=_get_mock_environment_fn(), num_iterations=1,
+        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
+    runner._checkpoint_experiment = test.mock.Mock()
+    runner._log_experiment = test.mock.Mock()
+    runner._save_tensorboard_summaries = test.mock.Mock()
+    self.runner = runner
+    super(InternalIterationCounterTest, self).setUp()
+
+  def testCompletedIterationCounterIsUsed(self):
+    self.runner._completed_iteration = 20
+    self.runner._run_one_iteration(36).join()
+    self.runner._checkpoint_experiment.assert_called_once_with(20)
+
+  def testCompletedIterationCounterIsInitialized(self):
+    self.runner.run_experiment()
+    self.runner._checkpoint_experiment.assert_called_once_with(0)
+
+  def testCompletedIterationCounterIsIncremented(self):
+    self.runner._completed_iteration = 20
+    self.runner._run_one_iteration(36).join()
+    self.assertEqual(self.runner._completed_iteration, 21)
+
+
 if __name__ == '__main__':
   test.main()

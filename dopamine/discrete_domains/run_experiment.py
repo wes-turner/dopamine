@@ -564,6 +564,7 @@ class AsyncRunner(Runner):
   See `_run_one_iteration` for more details on how iterations are ran
   asynchronously.
   """
+
   def __init__(
       self, base_dir, create_agent_fn,
       create_environment_fn=atari_lib.create_atari_environment,
@@ -602,6 +603,9 @@ class AsyncRunner(Runner):
     """
     # TODO(aarg): Change the thread management to an implementation with queues.
     threads = []
+    # TODO(westurner): See how to refactor the code to avoid setting an internal
+    # attribute.
+    self._completed_iteration = self._start_iteration
     for iteration in range(self._start_iteration, self._num_iterations):
       self._running_iterations.acquire()
       thread = threading.Thread(
@@ -622,9 +626,21 @@ class AsyncRunner(Runner):
       iteration: int, current iteration number, used as a global_step for saving
         Tensorboard summaries
     """
-    statistics = super(AsyncRunner, self)._run_one_iteration(iteration)
+    statistics = iteration_statistics.IterationStatistics()
+    tf.logging.info('Starting iteration %d', iteration)
+    num_episodes_train, average_reward_train = self._run_train_phase(
+        statistics)
+    num_episodes_eval, average_reward_eval = self._run_eval_phase(
+        statistics)
     with self._output_lock:
-      self._log_experiment(iteration, statistics)
-      self._checkpoint_experiment(iteration)
+      # The checkpoint ID matches the number of iteration by completion
+      # order. The completed number of iterations is tracked by
+      # `_completed_iteration` and incremented at the end of each iteration.
+      self._checkpoint_experiment(self._completed_iteration)
+      self._log_experiment(self._completed_iteration, statistics)
+      self._save_tensorboard_summaries(
+          self._completed_iteration, num_episodes_train, average_reward_train,
+          num_episodes_eval, average_reward_eval)
+      self._completed_iteration += 1
     tf.logging.info('Completed iteration %d.', iteration)
     self._running_iterations.release()
