@@ -564,6 +564,7 @@ class AsyncRunner(Runner):
   See `_run_one_iteration` for more details on how iterations are ran
   asynchronously.
   """
+
   def __init__(
       self, base_dir, create_agent_fn,
       create_environment_fn=atari_lib.create_atari_environment,
