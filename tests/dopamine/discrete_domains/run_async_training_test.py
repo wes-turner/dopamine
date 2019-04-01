@@ -71,7 +71,8 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     runner.run_experiment()
     self.assertEqual(mock_agent.begin_episode.call_count, 18)
 
-  @parameterized.parameters([(1, 1), (2, 2), (3, 4), (4, 5)])
+  @parameterized.named_parameters([
+      ('1_iter', 1, 1), ('2_iter', 2, 2), ('3_iter', 3, 4), ('4_iter', 4, 5)])
   @test.mock.patch.object(threading, 'Semaphore')
   def testMultipleIterationManagement(
       self, iterations, expected_call_count, semaphore):
@@ -90,7 +91,7 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     self.assertEqual(mock_semaphore.release.call_count, expected_call_count)
 
   @test.mock.patch.object(tf, 'Summary')
-  def testTFSummary(self, summary):
+  def testTFSummaryTagExport(self, summary):
     runner = run_experiment.AsyncRunner(
         base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
         create_environment_fn=_get_mock_environment_fn(),
