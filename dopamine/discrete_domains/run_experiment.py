@@ -599,14 +599,14 @@ class AsyncRunner(Runner):
     def _start_iteration(*args):
       thread = threading.Thread(target=self._run_one_iteration, args=args)
       thread.start()
-      threads.append(thread)
+      return thread
 
     for iteration in range(self._start_iteration, self._num_iterations):
       if (iteration + 1) % self._eval_period == 0:
         eval_iterations.acquire()
-        _start_iteration(eval_iterations, iteration, True)
+        threads.append(_start_iteration(eval_iterations, iteration, True))
       train_iterations.acquire()
-      _start_iteration(train_iterations, iteration, False)
+      threads.append(_start_iteration(train_iterations, iteration, False))
 
     # Wait for all running iterations to complete.
     for thread in threads:
