@@ -421,7 +421,7 @@ class Runner(object):
         statistics)
 
     self._save_tensorboard_summaries(iteration, num_episodes_train,
-                                    average_reward_train, tag='Train')
+                                     average_reward_train, tag='Train')
 
     self._save_tensorboard_summaries(iteration, num_episodes_eval,
                                      average_reward_eval, tag='Eval')
