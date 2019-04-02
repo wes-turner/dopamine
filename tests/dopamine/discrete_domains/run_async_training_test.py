@@ -72,9 +72,10 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     self.assertEqual(mock_agent.begin_episode.call_count, 18)
 
   @parameterized.named_parameters([
-      ('1_iter', 1, 1), ('2_iter', 2, 2), ('3_iter', 3, 4), ('4_iter', 4, 5)])
+      ('with_1_iteration', 1, 1), ('with_2_iterations', 2, 2),
+      ('with_3_iterations', 3, 4), ('with_4_iterations', 4, 5)])
   @test.mock.patch.object(threading, 'Semaphore')
-  def testMultipleIterationManagement(
+  def testNumberOfSemaphoreCalls(
       self, iterations, expected_call_count, semaphore):
     mock_semaphore = test.mock.Mock()
     semaphore.return_value = mock_semaphore
@@ -127,7 +128,8 @@ class InternalIterationCounterTest(test.TestCase):
 
   def testCompletedIterationCounterIsUsed(self):
     self.runner._completed_iteration = 20
-    self.runner._run_one_iteration(test.mock.Mock(), 36, False)
+    self.runner._run_one_iteration(
+        lock=test.mock.Mock(), iteration=36, eval_mode=False)
     self.runner._checkpoint_experiment.assert_called_once_with(20)
 
   def testCompletedIterationCounterIsInitialized(self):
@@ -136,7 +138,8 @@ class InternalIterationCounterTest(test.TestCase):
 
   def testCompletedIterationCounterIsIncremented(self):
     self.runner._completed_iteration = 20
-    self.runner._run_one_iteration(test.mock.Mock(), 36, False)
+    self.runner._run_one_iteration(
+        lock=test.mock.Mock(), iteration=36, eval_mode=False)
     self.assertEqual(self.runner._completed_iteration, 21)
 
 
