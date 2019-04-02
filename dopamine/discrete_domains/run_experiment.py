@@ -365,6 +365,7 @@ class Runner(object):
       average_reward: The average reward generated in this phase.
     """
     # Perform the training phase, during which the agent learns.
+    # TODO(#137): Replace `eval_mode` with TF ModeKeys.
     self._agent.eval_mode = False
     start_time = time.time()
     number_steps, sum_returns, num_episodes = self._run_one_phase(
