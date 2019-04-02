@@ -91,7 +91,7 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     self.assertEqual(mock_semaphore.release.call_count, expected_call_count)
 
   @test.mock.patch.object(tf, 'Summary')
-  def testTFSummaryTagExport(self, summary):
+  def testSummariesExportedWithProperTags(self, summary):
     runner = run_experiment.AsyncRunner(
         base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
         create_environment_fn=_get_mock_environment_fn(),
