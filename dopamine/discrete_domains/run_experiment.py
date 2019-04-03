@@ -614,13 +614,13 @@ class AsyncRunner(Runner):
     # go inline to this method.
     training_worker = threading.Thread(target=self._run_training_steps)
     training_worker.start()
-    threads = [training_worker]
+    experience_threads = []
     for iteration in range(self._start_iteration, self._num_iterations):
       self._running_iterations.put(1)
       thread = threading.Thread(
           target=self._run_one_iteration, args=(iteration,))
       thread.start()
-      threads.append(thread)
+      experience_threads.append(thread)
 
     # Wait for all tasks to complete.
     self._running_iterations.join()
@@ -628,8 +628,9 @@ class AsyncRunner(Runner):
     # Indicate training step thread to stop.
     self._remaining_training_steps.put(None)
     # Wait for all running threads to complete.
-    for thread in threads:
+    for thread in experience_threads:
       thread.join()
+    training_worker.join()
 
   def _begin_episode(self, observation):
     # Increments training steps and blocks if training is too slow.
