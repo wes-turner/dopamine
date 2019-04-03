@@ -365,6 +365,7 @@ class Runner(object):
       average_reward: The average reward generated in this phase.
     """
     # Perform the training phase, during which the agent learns.
+    # TODO(#137): Replace `eval_mode` with TF ModeKeys.
     self._agent.eval_mode = False
     start_time = time.time()
     number_steps, sum_returns, num_episodes = self._run_one_phase(
@@ -421,44 +422,39 @@ class Runner(object):
         statistics)
 
     self._save_tensorboard_summaries(iteration, num_episodes_train,
-                                     average_reward_train, num_episodes_eval,
-                                     average_reward_eval)
+                                     average_reward_train, tag='Train')
+
+    self._save_tensorboard_summaries(iteration, num_episodes_eval,
+                                     average_reward_eval, tag='Eval')
     return statistics.data_lists
 
-  def _save_tensorboard_summaries(self, iteration,
-                                  num_episodes_train,
-                                  average_reward_train,
-                                  num_episodes_eval,
-                                  average_reward_eval):
+  def _save_tensorboard_summaries(self, iteration, num_episodes,
+                                  average_reward, tag):
     """Save statistics as tensorboard summaries.
 
     Args:
       iteration: int, The current iteration number.
-      num_episodes_train: int, number of training episodes run.
-      average_reward_train: float, The average training reward.
-      num_episodes_eval: int, number of evaluation episodes run.
-      average_reward_eval: float, The average evaluation reward.
+      num_episodes: int, number of training episodes run.
+      average_reward: float, The average reward.
+      tag: str, Tag to apply to Tensorboard summaries (e.g `train`, `eval`).
     """
     summary = tf.Summary(value=[
-        tf.Summary.Value(tag='Train/NumEpisodes',
-                         simple_value=num_episodes_train),
-        tf.Summary.Value(tag='Train/AverageReturns',
-                         simple_value=average_reward_train),
-        tf.Summary.Value(tag='Eval/NumEpisodes',
-                         simple_value=num_episodes_eval),
-        tf.Summary.Value(tag='Eval/AverageReturns',
-                         simple_value=average_reward_eval)
+        tf.Summary.Value(
+            tag='{}/NumEpisodes'.format(tag), simple_value=num_episodes),
+        tf.Summary.Value(
+            tag='{}/AverageReturns'.format(tag), simple_value=average_reward),
     ])
     self._summary_writer.add_summary(summary, iteration)
 
-  def _log_experiment(self, iteration, statistics):
+  def _log_experiment(self, iteration, statistics, suffix=''):
     """Records the results of the current iteration.
 
     Args:
       iteration: int, iteration number.
       statistics: `IterationStatistics` object containing statistics to log.
+      suffix: string, suffix to add to the logging key.
     """
-    self._logger['iteration_{:d}'.format(iteration)] = statistics
+    self._logger['iteration_{:d}{}'.format(iteration, suffix)] = statistics
     if iteration % self._log_every_n == 0:
       self._logger.log_to_file(self._logging_file_prefix, iteration)
 
@@ -540,18 +536,8 @@ class TrainRunner(Runner):
         statistics)
 
     self._save_tensorboard_summaries(iteration, num_episodes_train,
-                                     average_reward_train)
+                                     average_reward_train, tag='Train')
     return statistics.data_lists
-
-  def _save_tensorboard_summaries(self, iteration, num_episodes,
-                                  average_reward):
-    """Save statistics as tensorboard summaries."""
-    summary = tf.Summary(value=[
-        tf.Summary.Value(tag='Train/NumEpisodes', simple_value=num_episodes),
-        tf.Summary.Value(
-            tag='Train/AverageReturns', simple_value=average_reward),
-    ])
-    self._summary_writer.add_summary(summary, iteration)
 
 
 # TODO(aarg): Add more details about this runner and the way thread and local
@@ -583,7 +569,8 @@ class AsyncRunner(Runner):
     """
     threading_utils.initialize_local_attributes(
         self, _environment=create_environment_fn)
-    self._running_iterations = threading.Semaphore(max_simultaneous_iterations)
+    self._max_simultaneous_iterations = max_simultaneous_iterations
+    self._eval_period = max_simultaneous_iterations
     self._output_lock = threading.Lock()
 
     super(AsyncRunner, self).__init__(
@@ -603,44 +590,56 @@ class AsyncRunner(Runner):
     """
     # TODO(aarg): Change the thread management to an implementation with queues.
     threads = []
+    train_iterations = threading.Semaphore(self._max_simultaneous_iterations)
+    eval_iterations = threading.Semaphore(1)
     # TODO(westurner): See how to refactor the code to avoid setting an internal
     # attribute.
     self._completed_iteration = self._start_iteration
-    for iteration in range(self._start_iteration, self._num_iterations):
-      self._running_iterations.acquire()
-      thread = threading.Thread(
-          target=self._run_one_iteration, args=(iteration,))
+
+    def _start_iteration(*args):
+      thread = threading.Thread(target=self._run_one_iteration, args=args)
       thread.start()
-      threads.append(thread)
+      return thread
+
+    for iteration in range(self._start_iteration, self._num_iterations):
+      if (iteration + 1) % self._eval_period == 0:
+        eval_iterations.acquire()
+        threads.append(_start_iteration(eval_iterations, iteration, True))
+      train_iterations.acquire()
+      threads.append(_start_iteration(train_iterations, iteration, False))
+
     # Wait for all running iterations to complete.
     for thread in threads:
       thread.join()
 
-  def _run_one_iteration(self, iteration):
+  def _run_one_iteration(self, lock, iteration, eval_mode):
     """Runs one iteration in separate thread, logs and checkpoints results.
 
     Same as parent Runner implementation except that summary statistics are
     directly logged instead of being returned.
 
     Args:
+      lock: Semaphore object to be acquired before running the method and is
+        released at the end of its execution.
       iteration: int, current iteration number, used as a global_step for saving
-        Tensorboard summaries
+        Tensorboard summaries.
+      eval_mode: bool, whether this is an evaluation iteration.
     """
     statistics = iteration_statistics.IterationStatistics()
-    tf.logging.info('Starting iteration %d', iteration)
-    num_episodes_train, average_reward_train = self._run_train_phase(
-        statistics)
-    num_episodes_eval, average_reward_eval = self._run_eval_phase(
-        statistics)
+    iteration_name = '{}iteration {}'.format(
+        'eval ' if eval_mode else '', iteration)
+    tf.logging.info('Starting %s.', iteration_name)
+    run_phase = self._run_eval_phase if eval_mode else self._run_train_phase
+    num_episodes, average_reward = run_phase(statistics)
     with self._output_lock:
-      # The checkpoint ID matches the number of iteration by completion
-      # order. The completed number of iterations is tracked by
-      # `_completed_iteration` and incremented at the end of each iteration.
-      self._checkpoint_experiment(self._completed_iteration)
-      self._log_experiment(self._completed_iteration, statistics)
+      logging_iteration = iteration if eval_mode else self._completed_iteration
+      self._log_experiment(
+          logging_iteration, statistics, suffix='_eval' if eval_mode else '')
       self._save_tensorboard_summaries(
-          self._completed_iteration, num_episodes_train, average_reward_train,
-          num_episodes_eval, average_reward_eval)
-      self._completed_iteration += 1
-    tf.logging.info('Completed iteration %d.', iteration)
-    self._running_iterations.release()
+          logging_iteration, num_episodes, average_reward,
+          tag='Eval' if eval_mode else 'Train')
+      if not eval_mode:
+        self._checkpoint_experiment(self._completed_iteration)
+        self._completed_iteration += 1
+    tf.logging.info('Completed %s.', iteration_name)
+    lock.release()

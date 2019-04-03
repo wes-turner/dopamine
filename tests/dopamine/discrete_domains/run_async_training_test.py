@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for run_experiment_test.py."""
+"""Tests for async trainer in `run_experiment_test.py`."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -20,8 +20,10 @@ from __future__ import print_function
 
 import threading
 
+from absl.testing import parameterized
 from dopamine.discrete_domains import run_experiment
 from dopamine.utils import test_utils
+import tensorflow as tf
 from tensorflow import test
 
 
@@ -31,7 +33,7 @@ def _get_mock_environment_fn():
   return test.mock.MagicMock(return_value=mock_env)
 
 
-class AsyncRunnerTest(test.TestCase):
+class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
   """Tests for asynchronous trainer."""
 
   def testEnvironmentInitializationPerThread(self):
@@ -69,20 +71,45 @@ class AsyncRunnerTest(test.TestCase):
     runner.run_experiment()
     self.assertEqual(mock_agent.begin_episode.call_count, 18)
 
+  @parameterized.named_parameters([
+      ('with_1_iteration', 1, 1), ('with_2_iterations', 2, 2),
+      ('with_3_iterations', 3, 4), ('with_4_iterations', 4, 5)])
   @test.mock.patch.object(threading, 'Semaphore')
-  def testMultipleIterationManagement(self, semaphore):
+  def testNumberOfSemaphoreCalls(
+      self, iterations, expected_call_count, semaphore):
     mock_semaphore = test.mock.Mock()
     semaphore.return_value = mock_semaphore
     runner = run_experiment.AsyncRunner(
         base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
-        create_environment_fn=_get_mock_environment_fn(), num_iterations=1,
-        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
+        create_environment_fn=_get_mock_environment_fn(),
+        num_iterations=iterations, training_steps=1, evaluation_steps=0,
+        max_simultaneous_iterations=3)
     runner._checkpoint_experiment = test.mock.Mock()
     runner._log_experiment = test.mock.Mock()
     runner._save_tensorboard_summaries = test.mock.Mock()
     runner.run_experiment()
-    mock_semaphore.acquire.assert_called_once()
-    mock_semaphore.release.assert_called_once()
+    self.assertEqual(mock_semaphore.acquire.call_count, expected_call_count)
+    self.assertEqual(mock_semaphore.release.call_count, expected_call_count)
+
+  @test.mock.patch.object(tf, 'Summary')
+  def testSummariesExportedWithProperTags(self, summary):
+    runner = run_experiment.AsyncRunner(
+        base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
+        create_environment_fn=_get_mock_environment_fn(),
+        num_iterations=2, training_steps=1, evaluation_steps=0,
+        max_simultaneous_iterations=2)
+    runner._checkpoint_experiment = test.mock.Mock()
+    runner._log_experiment = test.mock.Mock()
+    runner._summary_writer = test.mock.Mock()
+    runner.run_experiment()
+    self.assertCountEqual(
+        summary.Value.call_args_list,
+        [test.mock.call(simple_value=0, tag='Eval/NumEpisodes'),
+         test.mock.call(simple_value=0, tag='Eval/AverageReturns'),
+         test.mock.call(simple_value=1, tag='Train/NumEpisodes'),
+         test.mock.call(simple_value=0, tag='Train/AverageReturns'),
+         test.mock.call(simple_value=1, tag='Train/NumEpisodes'),
+         test.mock.call(simple_value=0, tag='Train/AverageReturns'),])
 
 
 class InternalIterationCounterTest(test.TestCase):
@@ -101,7 +128,8 @@ class InternalIterationCounterTest(test.TestCase):
 
   def testCompletedIterationCounterIsUsed(self):
     self.runner._completed_iteration = 20
-    self.runner._run_one_iteration(36).join()
+    self.runner._run_one_iteration(
+        lock=test.mock.Mock(), iteration=36, eval_mode=False)
     self.runner._checkpoint_experiment.assert_called_once_with(20)
 
   def testCompletedIterationCounterIsInitialized(self):
@@ -110,7 +138,8 @@ class InternalIterationCounterTest(test.TestCase):
 
   def testCompletedIterationCounterIsIncremented(self):
     self.runner._completed_iteration = 20
-    self.runner._run_one_iteration(36).join()
+    self.runner._run_one_iteration(
+        lock=test.mock.Mock(), iteration=36, eval_mode=False)
     self.assertEqual(self.runner._completed_iteration, 21)
 
 
