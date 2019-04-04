@@ -561,7 +561,7 @@ class AsyncRunner(Runner):
   def __init__(
       self, base_dir, create_agent_fn,
       create_environment_fn=atari_lib.create_atari_environment,
-      max_simultaneous_iterations=1, **kwargs):
+      num_simultaneous_iterations=1, **kwargs):
     """Creates an asynchronous runner.
 
     Args:
@@ -570,29 +570,28 @@ class AsyncRunner(Runner):
         environment, and returns an agent.
       create_environment_fn: A function which receives a problem name and
         creates a Gym environment for that problem (e.g. an Atari 2600 game).
-      max_simultaneous_iterations: int, maximum number of iterations running
+      num_simultaneous_iterations: int, maximum number of iterations running
         simultaneously in separate threads.
       **kwargs: Additional positional arguments.
     """
     threading_utils.initialize_local_attributes(
         self, _environment=create_environment_fn)
-    self._eval_period = max_simultaneous_iterations
+    self._eval_period = num_simultaneous_iterations
     self._output_lock = threading.Lock()
-    self._experience_queue = queue.Queue(max_simultaneous_iterations)
-    self._training_queue = queue.Queue(max_simultaneous_iterations)
+    self._experience_queue = queue.Queue(num_simultaneous_iterations)
+    self._training_queue = queue.Queue(num_simultaneous_iterations)
 
     super(AsyncRunner, self).__init__(
         base_dir=base_dir, create_agent_fn=create_agent_fn,
         create_environment_fn=create_environment_fn, **kwargs)
 
-  # TODO(aarg): Decouple experience generation from training.
   def _run_iterations(self):
     """Runs required number of training iterations sequentially.
 
     Statistics from each iteration are logged and exported for tensorboard.
 
     Iterations are run in multiple threads simultaneously (number of
-    simultaneous threads is specified by `max_simultaneous_iterations`). Each
+    simultaneous threads is specified by `num_simultaneous_iterations`). Each
     time an iteration completes a new one starts until the right number of
     iterations is run.
     """

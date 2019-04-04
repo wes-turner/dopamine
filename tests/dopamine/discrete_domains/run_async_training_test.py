@@ -61,7 +61,7 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     runner = self._get_runner(
         create_agent_fn=test.mock.MagicMock(),
         create_environment_fn=environment_fn, num_iterations=1,
-        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
+        training_steps=1, evaluation_steps=0, num_simultaneous_iterations=1)
 
     # Environment called once in init.
     environment_fn.assert_called_once()
@@ -76,7 +76,7 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     runner = self._get_runner(
         create_agent_fn=agent_fn,
         create_environment_fn=_get_mock_environment_fn(), num_iterations=18,
-        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
+        training_steps=1, evaluation_steps=0, num_simultaneous_iterations=1)
     runner.run_experiment()
     self.assertEqual(mock_agent.begin_episode.call_count, 18)
 
@@ -88,7 +88,7 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
       runner = self._get_runner(
           create_agent_fn=test.mock.MagicMock(),
           create_environment_fn=_get_mock_environment_fn(), num_iterations=3,
-          training_steps=2, evaluation_steps=6, max_simultaneous_iterations=1)
+          training_steps=2, evaluation_steps=6, num_simultaneous_iterations=1)
       runner.run_experiment()
 
     def _put_call_cnt(v):
@@ -106,7 +106,7 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     runner = self._get_runner(
         create_agent_fn=agent_fn,
         create_environment_fn=_get_mock_environment_fn(), num_iterations=3,
-        training_steps=2, evaluation_steps=6, max_simultaneous_iterations=1)
+        training_steps=2, evaluation_steps=6, num_simultaneous_iterations=1)
     runner.run_experiment()
     self.assertEqual(agent.begin_episode.call_count, 24)
 
@@ -116,7 +116,7 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
         base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
         create_environment_fn=_get_mock_environment_fn(),
         num_iterations=2, training_steps=1, evaluation_steps=0,
-        max_simultaneous_iterations=2)
+        num_simultaneous_iterations=2)
     runner._checkpoint_experiment = test.mock.Mock()
     runner._log_experiment = test.mock.Mock()
     runner._summary_writer = test.mock.Mock()
@@ -138,7 +138,7 @@ class InternalIterationCounterTest(test.TestCase):
     runner = run_experiment.AsyncRunner(
         base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
         create_environment_fn=_get_mock_environment_fn(), num_iterations=1,
-        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
+        training_steps=1, evaluation_steps=0, num_simultaneous_iterations=1)
     runner._checkpoint_experiment = test.mock.Mock()
     runner._log_experiment = test.mock.Mock()
     runner._save_tensorboard_summaries = test.mock.Mock()
