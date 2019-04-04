@@ -555,6 +555,9 @@ def _start_worker_thread(task_queue):
     - task: tuple of positional arguments to pass to the function.
   Each task is executed by calling `function(*task)`.
 
+  The worker thread stops when a task `None` is added to the task queue and
+  processed by the worker.
+
   Args:
     task_queue: Queue object containing tasks to perform.
 
