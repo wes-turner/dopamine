@@ -581,7 +581,7 @@ class AsyncRunner(Runner):
         environment, and returns an agent.
       create_environment_fn: A function which receives a problem name and
         creates a Gym environment for that problem (e.g. an Atari 2600 game).
-      num_simultaneous_iterations: int, maximum number of iterations running
+      num_simultaneous_iterations: int, number of iterations running
         simultaneously in separate threads.
       **kwargs: Additional positional arguments.
     """
