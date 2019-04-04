@@ -640,10 +640,12 @@ class AsyncRunner(Runner):
     return self._agent.step(reward, observation, training=False)
 
   def _enqueue_training_step(self):
-    """Increments training steps to run and blocks if training is too slow."""
-    # If training is delayed, this will block episode generation until training
-    # catches up. This ensures that training orccurs simultaneously to episode
-    # generation with a constant training step / episode steps ratio.
+    """Increments training steps to run and blocks if training is too slow.
+
+    If training is delayed, this will block episode generation until training
+    catches up. This ensures that training orccurs simultaneously to episode
+    generation with a constant training step / episode steps ratio.
+    """
     if self._agent.eval_mode:
       return
     self._training_queue.put(0)  # Value doesn't matter.
