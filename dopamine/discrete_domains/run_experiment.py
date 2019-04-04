@@ -372,6 +372,7 @@ class Runner(object):
       average_reward: The average reward generated in this phase.
     """
     # Perform the training phase, during which the agent learns.
+    # TODO(#137): Replace `eval_mode` with TF ModeKeys.
     self._agent.eval_mode = False
     start_time = time.time()
     number_steps, sum_returns, num_episodes = self._run_one_phase(
@@ -428,44 +429,39 @@ class Runner(object):
         statistics)
 
     self._save_tensorboard_summaries(iteration, num_episodes_train,
-                                     average_reward_train, num_episodes_eval,
-                                     average_reward_eval)
+                                     average_reward_train, tag='Train')
+
+    self._save_tensorboard_summaries(iteration, num_episodes_eval,
+                                     average_reward_eval, tag='Eval')
     return statistics.data_lists
 
-  def _save_tensorboard_summaries(self, iteration,
-                                  num_episodes_train,
-                                  average_reward_train,
-                                  num_episodes_eval,
-                                  average_reward_eval):
+  def _save_tensorboard_summaries(self, iteration, num_episodes,
+                                  average_reward, tag):
     """Save statistics as tensorboard summaries.
 
     Args:
       iteration: int, The current iteration number.
-      num_episodes_train: int, number of training episodes run.
-      average_reward_train: float, The average training reward.
-      num_episodes_eval: int, number of evaluation episodes run.
-      average_reward_eval: float, The average evaluation reward.
+      num_episodes: int, number of training episodes run.
+      average_reward: float, The average reward.
+      tag: str, Tag to apply to Tensorboard summaries (e.g `train`, `eval`).
     """
     summary = tf.Summary(value=[
-        tf.Summary.Value(tag='Train/NumEpisodes',
-                         simple_value=num_episodes_train),
-        tf.Summary.Value(tag='Train/AverageReturns',
-                         simple_value=average_reward_train),
-        tf.Summary.Value(tag='Eval/NumEpisodes',
-                         simple_value=num_episodes_eval),
-        tf.Summary.Value(tag='Eval/AverageReturns',
-                         simple_value=average_reward_eval)
+        tf.Summary.Value(
+            tag='{}/NumEpisodes'.format(tag), simple_value=num_episodes),
+        tf.Summary.Value(
+            tag='{}/AverageReturns'.format(tag), simple_value=average_reward),
     ])
     self._summary_writer.add_summary(summary, iteration)
 
-  def _log_experiment(self, iteration, statistics):
+  def _log_experiment(self, iteration, statistics, suffix=''):
     """Records the results of the current iteration.
 
     Args:
       iteration: int, iteration number.
       statistics: `IterationStatistics` object containing statistics to log.
+      suffix: string, suffix to add to the logging key.
     """
-    self._logger['iteration_{:d}'.format(iteration)] = statistics
+    self._logger['iteration_{:d}{}'.format(iteration, suffix)] = statistics
     if iteration % self._log_every_n == 0:
       self._logger.log_to_file(self._logging_file_prefix, iteration)
 
@@ -547,18 +543,8 @@ class TrainRunner(Runner):
         statistics)
 
     self._save_tensorboard_summaries(iteration, num_episodes_train,
-                                     average_reward_train)
+                                     average_reward_train, tag='Train')
     return statistics.data_lists
-
-  def _save_tensorboard_summaries(self, iteration, num_episodes,
-                                  average_reward):
-    """Save statistics as tensorboard summaries."""
-    summary = tf.Summary(value=[
-        tf.Summary.Value(tag='Train/NumEpisodes', simple_value=num_episodes),
-        tf.Summary.Value(
-            tag='Train/AverageReturns', simple_value=average_reward),
-    ])
-    self._summary_writer.add_summary(summary, iteration)
 
 
 # TODO(aarg): Add more details about this runner and the way thread and local
@@ -590,6 +576,7 @@ class AsyncRunner(Runner):
     """
     threading_utils.initialize_local_attributes(
         self, _environment=create_environment_fn)
+    self._eval_period = max_simultaneous_iterations
     self._output_lock = threading.Lock()
     self._experience_queue = queue.Queue(max_simultaneous_iterations)
     self._training_queue = queue.Queue(max_simultaneous_iterations)
@@ -612,15 +599,25 @@ class AsyncRunner(Runner):
     # TODO(aarg): Change the thread management to an implementation with queues
     # and with a fix number of thread workers. With the revamp, training might
     # go inline to this method.
+    def _start_iteration(*args):
+      thread = threading.Thread(target=self._run_one_iteration, args=args)
+      thread.start()
+      return thread
+
     training_worker = threading.Thread(target=self._run_training_steps)
     training_worker.start()
     experience_threads = []
+    # TODO(westurner): See how to refactor the code to avoid setting an internal
+    # attribute.
+    self._completed_iteration = self._start_iteration
     for iteration in range(self._start_iteration, self._num_iterations):
-      self._experience_queue.put(1)
-      thread = threading.Thread(
-          target=self._run_one_iteration, args=(iteration,))
-      thread.start()
-      experience_threads.append(thread)
+      if (iteration + 1) % self._eval_period == 0:
+        # TODO(aarg): As part of the revamp indicated above, set the eval mode
+        # directly in the queue `push`.
+        self._experience_queue.put('train')
+        experience_threads.append(_start_iteration(iteration, True))
+      self._experience_queue.put('eval')
+      experience_threads.append(_start_iteration(iteration, False))
 
     # Wait for all tasks to complete.
     self._experience_queue.join()
@@ -661,7 +658,7 @@ class AsyncRunner(Runner):
       self._agent.train_step()
       self._training_queue.task_done()
 
-  def _run_one_iteration(self, iteration):
+  def _run_one_iteration(self, iteration, eval_mode):
     """Runs one iteration in separate thread, logs and checkpoints results.
 
     Same as parent Runner implementation except that summary statistics are
@@ -669,12 +666,25 @@ class AsyncRunner(Runner):
 
     Args:
       iteration: int, current iteration number, used as a global_step for saving
-        Tensorboard summaries
+        Tensorboard summaries.
+      eval_mode: bool, whether this is an evaluation iteration.
     """
-    statistics = super(AsyncRunner, self)._run_one_iteration(iteration)
+    statistics = iteration_statistics.IterationStatistics()
+    iteration_name = '{}iteration {}'.format(
+        'eval ' if eval_mode else '', iteration)
+    tf.logging.info('Starting %s.', iteration_name)
+    run_phase = self._run_eval_phase if eval_mode else self._run_train_phase
+    num_episodes, average_reward = run_phase(statistics)
     with self._output_lock:
-      self._log_experiment(iteration, statistics)
-      self._checkpoint_experiment(iteration)
-    tf.logging.info('Completed iteration %d.', iteration)
+      logging_iteration = iteration if eval_mode else self._completed_iteration
+      self._log_experiment(
+          logging_iteration, statistics, suffix='_eval' if eval_mode else '')
+      self._save_tensorboard_summaries(
+          logging_iteration, num_episodes, average_reward,
+          tag='Eval' if eval_mode else 'Train')
+      if not eval_mode:
+        self._checkpoint_experiment(self._completed_iteration)
+        self._completed_iteration += 1
+    tf.logging.info('Completed %s.', iteration_name)
     self._experience_queue.get()
     self._experience_queue.task_done()
