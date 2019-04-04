@@ -33,6 +33,7 @@ from dopamine.discrete_domains import logger
 from dopamine.utils import threading_utils
 import gin.tf
 import numpy as np
+import queue
 import tensorflow as tf
 
 
@@ -253,7 +254,7 @@ class Runner(object):
       action: int, the initial action chosen by the agent.
     """
     initial_observation = self._environment.reset()
-    return self._agent.begin_episode(initial_observation)
+    return self._begin_episode(initial_observation)
 
   def _run_one_step(self, action):
     """Executes a single step in the environment.
@@ -275,6 +276,12 @@ class Runner(object):
       reward: float, the last reward from the environment.
     """
     self._agent.end_episode(reward)
+
+  def _begin_episode(self, observation):
+    return self._agent.begin_episode(observation)
+
+  def _step(self, reward, observation):
+    return self._agent.step(reward, observation)
 
   def _run_one_episode(self):
     """Executes a full trajectory of the agent interacting with the environment.
@@ -308,9 +315,9 @@ class Runner(object):
         # If we lose a life but the episode is not over, signal an artificial
         # end of episode to the agent.
         self._end_episode(reward)
-        action = self._agent.begin_episode(observation)
+        action = self._begin_episode(observation)
       else:
-        action = self._agent.step(reward, observation)
+        action = self._step(reward, observation)
 
     self._end_episode(reward)
 
@@ -569,9 +576,10 @@ class AsyncRunner(Runner):
     """
     threading_utils.initialize_local_attributes(
         self, _environment=create_environment_fn)
-    self._max_simultaneous_iterations = max_simultaneous_iterations
     self._eval_period = max_simultaneous_iterations
     self._output_lock = threading.Lock()
+    self._experience_queue = queue.Queue(max_simultaneous_iterations)
+    self._training_queue = queue.Queue(max_simultaneous_iterations)
 
     super(AsyncRunner, self).__init__(
         base_dir=base_dir, create_agent_fn=create_agent_fn,
@@ -588,39 +596,77 @@ class AsyncRunner(Runner):
     time an iteration completes a new one starts until the right number of
     iterations is run.
     """
-    # TODO(aarg): Change the thread management to an implementation with queues.
-    threads = []
-    train_iterations = threading.Semaphore(self._max_simultaneous_iterations)
-    eval_iterations = threading.Semaphore(1)
-    # TODO(westurner): See how to refactor the code to avoid setting an internal
-    # attribute.
-    self._completed_iteration = self._start_iteration
-
+    # TODO(aarg): Change the thread management to an implementation with queues
+    # and with a fix number of thread workers. With the revamp, training might
+    # go inline to this method.
     def _start_iteration(*args):
       thread = threading.Thread(target=self._run_one_iteration, args=args)
       thread.start()
       return thread
 
+    training_worker = threading.Thread(target=self._run_training_steps)
+    training_worker.start()
+    experience_threads = []
+    # TODO(westurner): See how to refactor the code to avoid setting an internal
+    # attribute.
+    self._completed_iteration = self._start_iteration
     for iteration in range(self._start_iteration, self._num_iterations):
       if (iteration + 1) % self._eval_period == 0:
-        eval_iterations.acquire()
-        threads.append(_start_iteration(eval_iterations, iteration, True))
-      train_iterations.acquire()
-      threads.append(_start_iteration(train_iterations, iteration, False))
+        # TODO(aarg): As part of the revamp indicated above, set the eval mode
+        # directly in the queue `push`.
+        self._experience_queue.put('train')
+        experience_threads.append(_start_iteration(iteration, True))
+      self._experience_queue.put('eval')
+      experience_threads.append(_start_iteration(iteration, False))
 
-    # Wait for all running iterations to complete.
-    for thread in threads:
+    # Wait for all tasks to complete.
+    self._experience_queue.join()
+    self._training_queue.join()
+    # Indicate training step thread to stop.
+    self._training_queue.put(None)
+    # Wait for all running threads to complete.
+    for thread in experience_threads:
       thread.join()
+    training_worker.join()
 
-  def _run_one_iteration(self, lock, iteration, eval_mode):
+  def _begin_episode(self, observation):
+    # Increments training steps and blocks if training is too slow.
+    self._enqueue_training_step()
+    return self._agent.begin_episode(observation, training=False)
+
+  def _step(self, reward, observation):
+    # Increments training steps and blocks if training is too slow.
+    self._enqueue_training_step()
+    return self._agent.step(reward, observation, training=False)
+
+  def _enqueue_training_step(self):
+    """Increments training steps to run and blocks if training is too slow.
+
+    If training is delayed, this will block episode generation until training
+    catches up. This ensures that training orccurs simultaneously to episode
+    generation with a constant training step / episode steps ratio.
+    """
+    if self._agent.eval_mode:
+      return
+    self._training_queue.put(0)  # Value doesn't matter.
+
+  def _run_training_steps(self):
+    """Runs training steps until iterations and training queues are empty."""
+    while True:
+      item = self._training_queue.get()
+      if item is None:
+        self._training_queue.task_done()
+        return
+      self._agent.train_step()
+      self._training_queue.task_done()
+
+  def _run_one_iteration(self, iteration, eval_mode):
     """Runs one iteration in separate thread, logs and checkpoints results.
 
     Same as parent Runner implementation except that summary statistics are
     directly logged instead of being returned.
 
     Args:
-      lock: Semaphore object to be acquired before running the method and is
-        released at the end of its execution.
       iteration: int, current iteration number, used as a global_step for saving
         Tensorboard summaries.
       eval_mode: bool, whether this is an evaluation iteration.
@@ -642,4 +688,5 @@ class AsyncRunner(Runner):
         self._checkpoint_experiment(self._completed_iteration)
         self._completed_iteration += 1
     tf.logging.info('Completed %s.', iteration_name)
-    lock.release()
+    self._experience_queue.get()
+    self._experience_queue.task_done()
