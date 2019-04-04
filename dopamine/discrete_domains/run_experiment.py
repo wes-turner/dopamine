@@ -547,15 +547,32 @@ class TrainRunner(Runner):
     return statistics.data_lists
 
 
-def _worker(task_queue):
-  while True:
-    item = task_queue.get()
-    if item is None:
-      task_queue.task_done()
-      break
-    function, task = item
-    function(*task)
-    task_queue.task_done()
+def _start_worker_thread(task_queue):
+  """Starts and returns a thread working on tasks in provided queue.
+
+  Tasks in `task_queue` needs to be stored as tuple of:
+    - function: function taking positional arguments and returning None.
+    - task: tuple of positional arguments to pass to the function.
+  Each task is executed by calling `function(*task)`.
+
+  Args:
+    task_queue: Queue object containing tasks to perform.
+
+  Returns:
+    Thread object running and performing the tasks in `task_queue`.
+  """
+  def _worker(q):
+    while True:
+      item = q.get()
+      if item is None:
+        q.task_done()
+        break
+      function, task = item
+      function(*task)
+      q.task_done()
+  thread = threading.Thread(target=_worker, args=(task_queue,))
+  thread.start()
+  return thread
 
 
 # TODO(aarg): Add more details about this runner and the way thread and local
@@ -609,14 +626,9 @@ class AsyncRunner(Runner):
     experience_queue = queue.Queue()
     worker_threads = []
 
-    def _start_worker(q):
-      thread = threading.Thread(target=_worker, args=(q,))
-      thread.start()
-      worker_threads.append(thread)
-
     for _ in range(self._num_simultaneous_iterations):
-      _start_worker(experience_queue)
-    _start_worker(self._training_queue)
+      worker_threads.append(_start_worker_thread(experience_queue))
+    worker_threads.append(_start_worker_thread(self._training_queue))
 
     # TODO(westurner): See how to refactor the code to avoid setting an internal
     # attribute.
