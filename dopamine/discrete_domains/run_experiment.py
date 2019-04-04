@@ -547,6 +547,17 @@ class TrainRunner(Runner):
     return statistics.data_lists
 
 
+def _worker(task_queue):
+  while True:
+    item = task_queue.get()
+    if item is None:
+      task_queue.task_done()
+      break
+    action, task = item
+    action(*task)
+    task_queue.task_done()
+
+
 # TODO(aarg): Add more details about this runner and the way thread and local
 # variables are managed. This is somewhat hidden to the user.
 @threading_utils.local_attributes(['_environment'])
@@ -578,7 +589,6 @@ class AsyncRunner(Runner):
         self, _environment=create_environment_fn)
     self._eval_period = num_simultaneous_iterations
     self._output_lock = threading.Lock()
-    self._experience_queue = queue.Queue(num_simultaneous_iterations)
     self._training_queue = queue.Queue(num_simultaneous_iterations)
 
     super(AsyncRunner, self).__init__(
@@ -595,38 +605,40 @@ class AsyncRunner(Runner):
     time an iteration completes a new one starts until the right number of
     iterations is run.
     """
-    # TODO(aarg): Change the thread management to an implementation with queues
-    # and with a fix number of thread workers. With the revamp, training might
-    # go inline to this method.
-    def _start_iteration(*args):
-      thread = threading.Thread(target=self._run_one_iteration, args=args)
-      thread.start()
-      return thread
+    experience_queue = queue.Queue()
+    worker_threads = []
 
+    def _start_worker(q):
+      thread = threading.Thread(target=worker, args=(q,))
+      thread.start()
+      worker_threads.append(thread)
+
+    for _ in range(self._num_simultaneous_iterations):
+      _start_worker(experience_queue)
     training_worker = threading.Thread(target=self._run_training_steps)
     training_worker.start()
-    experience_threads = []
+    worker_threads.append(training_worker)
+
     # TODO(westurner): See how to refactor the code to avoid setting an internal
     # attribute.
     self._completed_iteration = self._start_iteration
     for iteration in range(self._start_iteration, self._num_iterations):
       if (iteration + 1) % self._eval_period == 0:
-        # TODO(aarg): As part of the revamp indicated above, set the eval mode
-        # directly in the queue `push`.
-        self._experience_queue.put('train')
-        experience_threads.append(_start_iteration(iteration, True))
-      self._experience_queue.put('eval')
-      experience_threads.append(_start_iteration(iteration, False))
+        experience_queue.put((self._run_one_iteration, (iteration, False)))  # TODO(aarg): Replace with ModeKeys.
+      experience_queue.put((self._run_one_iteration, (iteration, False)))
 
     # Wait for all tasks to complete.
-    self._experience_queue.join()
+    experience_queue.join()
     self._training_queue.join()
-    # Indicate training step thread to stop.
+
+    # Indicate workers to stop.
+    for _ in range(self._num_simultaneous_iterations):
+      experience_queue.put(None)
     self._training_queue.put(None)
+
     # Wait for all running threads to complete.
-    for thread in experience_threads:
+    for thread in worker_threads:
       thread.join()
-    training_worker.join()
 
   def _begin_episode(self, observation):
     # Increments training steps and blocks if training is too slow.
