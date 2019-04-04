@@ -553,8 +553,8 @@ def _worker(task_queue):
     if item is None:
       task_queue.task_done()
       break
-    action, task = item
-    action(*task)
+    function, task = item
+    function(*task)
     task_queue.task_done()
 
 
@@ -588,6 +588,7 @@ class AsyncRunner(Runner):
     threading_utils.initialize_local_attributes(
         self, _environment=create_environment_fn)
     self._eval_period = num_simultaneous_iterations
+    self._num_simultaneous_iterations = num_simultaneous_iterations
     self._output_lock = threading.Lock()
     self._training_queue = queue.Queue(num_simultaneous_iterations)
 
@@ -609,22 +610,21 @@ class AsyncRunner(Runner):
     worker_threads = []
 
     def _start_worker(q):
-      thread = threading.Thread(target=worker, args=(q,))
+      thread = threading.Thread(target=_worker, args=(q,))
       thread.start()
       worker_threads.append(thread)
 
     for _ in range(self._num_simultaneous_iterations):
       _start_worker(experience_queue)
-    training_worker = threading.Thread(target=self._run_training_steps)
-    training_worker.start()
-    worker_threads.append(training_worker)
+    _start_worker(self._training_queue)
 
     # TODO(westurner): See how to refactor the code to avoid setting an internal
     # attribute.
     self._completed_iteration = self._start_iteration
     for iteration in range(self._start_iteration, self._num_iterations):
       if (iteration + 1) % self._eval_period == 0:
-        experience_queue.put((self._run_one_iteration, (iteration, False)))  # TODO(aarg): Replace with ModeKeys.
+        # TODO(aarg): Replace with ModeKeys.
+        experience_queue.put((self._run_one_iteration, (iteration, True)))
       experience_queue.put((self._run_one_iteration, (iteration, False)))
 
     # Wait for all tasks to complete.
@@ -659,17 +659,7 @@ class AsyncRunner(Runner):
     """
     if self._agent.eval_mode:
       return
-    self._training_queue.put(0)  # Value doesn't matter.
-
-  def _run_training_steps(self):
-    """Runs training steps until iterations and training queues are empty."""
-    while True:
-      item = self._training_queue.get()
-      if item is None:
-        self._training_queue.task_done()
-        return
-      self._agent.train_step()
-      self._training_queue.task_done()
+    self._training_queue.put((self._agent.train_step, tuple([])))
 
   def _run_one_iteration(self, iteration, eval_mode):
     """Runs one iteration in separate thread, logs and checkpoints results.
@@ -699,5 +689,3 @@ class AsyncRunner(Runner):
         self._checkpoint_experiment(self._completed_iteration)
         self._completed_iteration += 1
     tf.logging.info('Completed %s.', iteration_name)
-    self._experience_queue.get()
-    self._experience_queue.task_done()
