@@ -610,8 +610,10 @@ class AsyncRunner(Runner):
     for iteration in range(self._start_iteration, self._num_iterations):
       if iteration and iteration % self._eval_period == 0:
         # TODO(aarg): Replace with ModeKeys.
-        experience_queue.put((self._run_one_iteration, (iteration, True)))
-      experience_queue.put((self._run_one_iteration, (iteration, False)))
+        experience_queue.put((self._run_one_iteration, (iteration - 1, True)))
+      experience_queue.put((self._run_one_iteration, (iteration,  False)))
+    experience_queue.put(
+        (self._run_one_iteration, (self._num_iterations - 1, True)))
 
     # Wait for all tasks to complete.
     experience_queue.join()

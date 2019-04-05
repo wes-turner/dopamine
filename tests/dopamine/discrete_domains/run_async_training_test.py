@@ -111,7 +111,15 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     self.assertEqual(_put_call_cnt(None), 2)  # Stop task.
 
   def testNumberSteps(self):
-    """Tests that the right number of agent steps are ran."""
+    """Tests that the right number of agent steps are ran.
+
+    Num iterations = 3
+    Num training iterations = 3
+    Num eval iterations = 3
+    Num training episodes per iteration = 2
+    Num eval episodes per iteration = 6
+    Num episodes = 3 * 2 + 3 * 6 = 24
+    """
     agent = test.mock.Mock()
     agent_fn = test.mock.MagicMock(return_value=agent)
     runner = self._get_runner(
