@@ -608,7 +608,7 @@ class AsyncRunner(Runner):
     # attribute.
     self._completed_iteration = self._start_iteration
     for iteration in range(self._start_iteration, self._num_iterations):
-      if iteration and iteration % self._eval_period == 0:
+      if (iteration + 1) % self._eval_period == 0:
         # TODO(aarg): Replace with ModeKeys.
         experience_queue.put((self._run_one_iteration, (iteration, True)))
       experience_queue.put((self._run_one_iteration, (iteration, False)))
