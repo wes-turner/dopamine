@@ -558,6 +558,7 @@ class AsyncRunner(Runner):
   asynchronously.
   """
 
+  # TODO(aarg): Add an `eval_period` argument, mapping to `_eval_period`.
   def __init__(
       self, base_dir, create_agent_fn,
       create_environment_fn=atari_lib.create_atari_environment,
