@@ -598,6 +598,7 @@ class AsyncRunner(Runner):
     experience_queue = queue.Queue()
     worker_threads = []
 
+    # TODO(aarg): Consider refactoring to use step level tasks.
     for _ in range(self._num_simultaneous_iterations):
       worker_threads.append(
           threading_utils.start_worker_thread(experience_queue))
