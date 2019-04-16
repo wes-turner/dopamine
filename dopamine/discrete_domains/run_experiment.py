@@ -558,6 +558,7 @@ class AsyncRunner(Runner):
   asynchronously.
   """
 
+  # TODO(aarg): Add an `eval_period` argument, mapping to `_eval_period`.
   def __init__(
       self, base_dir, create_agent_fn,
       create_environment_fn=atari_lib.create_atari_environment,
@@ -609,10 +610,12 @@ class AsyncRunner(Runner):
     # attribute.
     self._completed_iteration = self._start_iteration
     for iteration in range(self._start_iteration, self._num_iterations):
-      if (iteration + 1) % self._eval_period == 0:
+      if iteration and iteration % self._eval_period == 0:
         # TODO(aarg): Replace with ModeKeys.
-        experience_queue.put((self._run_one_iteration, (iteration, True)))
-      experience_queue.put((self._run_one_iteration, (iteration, False)))
+        experience_queue.put((self._run_one_iteration, (iteration - 1, True)))
+      experience_queue.put((self._run_one_iteration, (iteration,  False)))
+    experience_queue.put(
+        (self._run_one_iteration, (self._num_iterations - 1, True)))
 
     # Wait for all tasks to complete.
     experience_queue.join()

@@ -80,7 +80,16 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     runner.run_experiment()
     self.assertEqual(mock_agent.begin_episode.call_count, 18)
 
-  def testNumberTrainingSteps(self,):
+  @parameterized.named_parameters(
+      ('1stTrainTask', (0, False), 1),
+      ('2ndTrainTask', (1, False), 1),
+      ('3rdTrainTask', (2, False), 1),
+      ('1stEvalTask', (0, True), 1),
+      ('2ndEvalTask', (1, True), 1),
+      ('3rdEvalTask', (2, True), 1),
+      ('TrainingSteps', tuple([]), 6),
+      ('StopWorkers', None, 2))
+  def testTrainingTaskOccurrence(self, task, num_occurrences):
     """Tests that the right number of training steps are ran."""
     mock_put = test.mock.Mock()
     put = _wrap_method_with_mock_call(queue.Queue.put, mock_put)
@@ -101,17 +110,18 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
           cnt += item == v
       return cnt
 
-    self.assertEqual(_put_call_cnt((0, False)), 1)  # Train task.
-    self.assertEqual(_put_call_cnt((1, False,)), 1)  # Train task.
-    self.assertEqual(_put_call_cnt((2, False,)), 1)  # Train task.
-    self.assertEqual(_put_call_cnt((0, True,)), 1)  # Eval task.
-    self.assertEqual(_put_call_cnt((1, True,)), 1)  # Eval task.
-    self.assertEqual(_put_call_cnt((2, True,)), 1)  # Eval task.
-    self.assertEqual(_put_call_cnt(tuple([])), 6)  # Training step.
-    self.assertEqual(_put_call_cnt(None), 2)  # Stop task.
+    self.assertEqual(_put_call_cnt(task), num_occurrences)
 
   def testNumberSteps(self):
-    """Tests that the right number of agent steps are ran."""
+    """Tests that the right number of agent steps are ran.
+
+    Num iterations = 3
+    Num training iterations = 3
+    Num eval iterations = 3
+    Num training episodes per iteration = 2
+    Num eval episodes per iteration = 6
+    Num episodes = 3 * 2 + 3 * 6 = 24
+    """
     agent = test.mock.Mock()
     agent_fn = test.mock.MagicMock(return_value=agent)
     runner = self._get_runner(
