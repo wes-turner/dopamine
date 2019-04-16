@@ -561,7 +561,7 @@ class AsyncRunner(Runner):
   def __init__(
       self, base_dir, create_agent_fn,
       create_environment_fn=atari_lib.create_atari_environment,
-      max_simultaneous_iterations=1, **kwargs):
+      num_simultaneous_iterations=1, **kwargs):
     """Creates an asynchronous runner.
 
     Args:
@@ -570,64 +570,62 @@ class AsyncRunner(Runner):
         environment, and returns an agent.
       create_environment_fn: A function which receives a problem name and
         creates a Gym environment for that problem (e.g. an Atari 2600 game).
-      max_simultaneous_iterations: int, maximum number of iterations running
+      num_simultaneous_iterations: int, number of iterations running
         simultaneously in separate threads.
       **kwargs: Additional positional arguments.
     """
     threading_utils.initialize_local_attributes(
         self, _environment=create_environment_fn)
-    self._eval_period = max_simultaneous_iterations
+    self._eval_period = num_simultaneous_iterations
+    self._num_simultaneous_iterations = num_simultaneous_iterations
     self._output_lock = threading.Lock()
-    self._experience_queue = queue.Queue(max_simultaneous_iterations)
-    self._training_queue = queue.Queue(max_simultaneous_iterations)
+    self._training_queue = queue.Queue(num_simultaneous_iterations)
 
     super(AsyncRunner, self).__init__(
         base_dir=base_dir, create_agent_fn=create_agent_fn,
         create_environment_fn=create_environment_fn, **kwargs)
 
-  # TODO(aarg): Decouple experience generation from training.
   def _run_iterations(self):
     """Runs required number of training iterations sequentially.
 
     Statistics from each iteration are logged and exported for tensorboard.
 
     Iterations are run in multiple threads simultaneously (number of
-    simultaneous threads is specified by `max_simultaneous_iterations`). Each
+    simultaneous threads is specified by `num_simultaneous_iterations`). Each
     time an iteration completes a new one starts until the right number of
     iterations is run.
     """
-    # TODO(aarg): Change the thread management to an implementation with queues
-    # and with a fix number of thread workers. With the revamp, training might
-    # go inline to this method.
-    def _start_iteration(*args):
-      thread = threading.Thread(target=self._run_one_iteration, args=args)
-      thread.start()
-      return thread
+    experience_queue = queue.Queue()
+    worker_threads = []
 
-    training_worker = threading.Thread(target=self._run_training_steps)
-    training_worker.start()
-    experience_threads = []
+    # TODO(aarg): Consider refactoring to use step level tasks.
+    for _ in range(self._num_simultaneous_iterations):
+      worker_threads.append(
+          threading_utils.start_worker_thread(experience_queue))
+    worker_threads.append(
+        threading_utils.start_worker_thread(self._training_queue))
+
     # TODO(westurner): See how to refactor the code to avoid setting an internal
     # attribute.
     self._completed_iteration = self._start_iteration
     for iteration in range(self._start_iteration, self._num_iterations):
       if (iteration + 1) % self._eval_period == 0:
-        # TODO(aarg): As part of the revamp indicated above, set the eval mode
-        # directly in the queue `push`.
-        self._experience_queue.put('train')
-        experience_threads.append(_start_iteration(iteration, True))
-      self._experience_queue.put('eval')
-      experience_threads.append(_start_iteration(iteration, False))
+        # TODO(aarg): Replace with ModeKeys.
+        experience_queue.put((self._run_one_iteration, (iteration, True)))
+      experience_queue.put((self._run_one_iteration, (iteration, False)))
 
     # Wait for all tasks to complete.
-    self._experience_queue.join()
+    experience_queue.join()
     self._training_queue.join()
-    # Indicate training step thread to stop.
+
+    # Indicate workers to stop.
+    for _ in range(self._num_simultaneous_iterations):
+      experience_queue.put(None)
     self._training_queue.put(None)
+
     # Wait for all running threads to complete.
-    for thread in experience_threads:
+    for thread in worker_threads:
       thread.join()
-    training_worker.join()
 
   def _begin_episode(self, observation):
     # Increments training steps and blocks if training is too slow.
@@ -648,17 +646,7 @@ class AsyncRunner(Runner):
     """
     if self._agent.eval_mode:
       return
-    self._training_queue.put(0)  # Value doesn't matter.
-
-  def _run_training_steps(self):
-    """Runs training steps until iterations and training queues are empty."""
-    while True:
-      item = self._training_queue.get()
-      if item is None:
-        self._training_queue.task_done()
-        return
-      self._agent.train_step()
-      self._training_queue.task_done()
+    self._training_queue.put((self._agent.train_step, tuple([])))
 
   def _run_one_iteration(self, iteration, eval_mode):
     """Runs one iteration in separate thread, logs and checkpoints results.
@@ -688,5 +676,3 @@ class AsyncRunner(Runner):
         self._checkpoint_experiment(self._completed_iteration)
         self._completed_iteration += 1
     tf.logging.info('Completed %s.', iteration_name)
-    self._experience_queue.get()
-    self._experience_queue.task_done()

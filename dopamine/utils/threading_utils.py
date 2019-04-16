@@ -214,3 +214,37 @@ def initialize_local_attributes(obj, **kwargs):
       raise AttributeError(
           'Object `{}` already has a `{}` attribute.'.format(obj, default_attr))
     setattr(obj, default_attr, val)
+
+
+def _queue_worker(task_queue):
+  """Reads and executes tasks in given queue until `None` is read."""
+  while True:
+    item = task_queue.get()
+    if item is None:
+      task_queue.task_done()
+      break
+    function, task = item
+    function(*task)
+    task_queue.task_done()
+
+
+def start_worker_thread(task_queue):
+  """Starts and returns a thread working on tasks in provided queue.
+
+  Tasks in `task_queue` needs to be stored as tuple of:
+    - function: function taking positional arguments and returning None.
+    - task: tuple of positional arguments to pass to the function.
+  Each task is executed by calling `function(*task)`.
+
+  The worker thread stops when a task `None` is added to the task queue and
+  processed by the worker.
+
+  Args:
+    task_queue: `queue.Queue` object containing tasks to perform.
+
+  Returns:
+    Thread object running and performing the tasks in `task_queue`.
+  """
+  thread = threading.Thread(target=_queue_worker, args=(task_queue,))
+  thread.start()
+  return thread

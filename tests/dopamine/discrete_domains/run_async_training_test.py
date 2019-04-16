@@ -61,7 +61,7 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     runner = self._get_runner(
         create_agent_fn=test.mock.MagicMock(),
         create_environment_fn=environment_fn, num_iterations=1,
-        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
+        training_steps=1, evaluation_steps=0, num_simultaneous_iterations=1)
 
     # Environment called once in init.
     environment_fn.assert_called_once()
@@ -76,7 +76,7 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     runner = self._get_runner(
         create_agent_fn=agent_fn,
         create_environment_fn=_get_mock_environment_fn(), num_iterations=18,
-        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
+        training_steps=1, evaluation_steps=0, num_simultaneous_iterations=1)
     runner.run_experiment()
     self.assertEqual(mock_agent.begin_episode.call_count, 18)
 
@@ -88,16 +88,27 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
       runner = self._get_runner(
           create_agent_fn=test.mock.MagicMock(),
           create_environment_fn=_get_mock_environment_fn(), num_iterations=3,
-          training_steps=2, evaluation_steps=6, max_simultaneous_iterations=1)
+          training_steps=2, evaluation_steps=6, num_simultaneous_iterations=1)
       runner.run_experiment()
 
     def _put_call_cnt(v):
-      return sum([list(call)[0] == v for call in mock_put.call_args_list])
+      cnt = 0
+      for call in  mock_put.call_args_list:
+        item = list(call)[0][0]
+        if isinstance(item, tuple):
+          cnt += item[1] == v
+        else:
+          cnt += item == v
+      return cnt
 
-    self.assertEqual(_put_call_cnt(('train',)), 3)
-    self.assertEqual(_put_call_cnt(('eval',)), 3)
-    self.assertEqual(_put_call_cnt((0,)), 6)
-    self.assertEqual(_put_call_cnt((None,)), 1)
+    self.assertEqual(_put_call_cnt((0, False)), 1)  # Train task.
+    self.assertEqual(_put_call_cnt((1, False,)), 1)  # Train task.
+    self.assertEqual(_put_call_cnt((2, False,)), 1)  # Train task.
+    self.assertEqual(_put_call_cnt((0, True,)), 1)  # Eval task.
+    self.assertEqual(_put_call_cnt((1, True,)), 1)  # Eval task.
+    self.assertEqual(_put_call_cnt((2, True,)), 1)  # Eval task.
+    self.assertEqual(_put_call_cnt(tuple([])), 6)  # Training step.
+    self.assertEqual(_put_call_cnt(None), 2)  # Stop task.
 
   def testNumberSteps(self):
     """Tests that the right number of agent steps are ran."""
@@ -106,7 +117,7 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
     runner = self._get_runner(
         create_agent_fn=agent_fn,
         create_environment_fn=_get_mock_environment_fn(), num_iterations=3,
-        training_steps=2, evaluation_steps=6, max_simultaneous_iterations=1)
+        training_steps=2, evaluation_steps=6, num_simultaneous_iterations=1)
     runner.run_experiment()
     self.assertEqual(agent.begin_episode.call_count, 24)
 
@@ -116,7 +127,7 @@ class AsyncRunnerTest(test.TestCase, parameterized.TestCase):
         base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
         create_environment_fn=_get_mock_environment_fn(),
         num_iterations=2, training_steps=1, evaluation_steps=0,
-        max_simultaneous_iterations=2)
+        num_simultaneous_iterations=2)
     runner._checkpoint_experiment = test.mock.Mock()
     runner._log_experiment = test.mock.Mock()
     runner._summary_writer = test.mock.Mock()
@@ -138,7 +149,7 @@ class InternalIterationCounterTest(test.TestCase):
     runner = run_experiment.AsyncRunner(
         base_dir=self.get_temp_dir(), create_agent_fn=test.mock.MagicMock(),
         create_environment_fn=_get_mock_environment_fn(), num_iterations=1,
-        training_steps=1, evaluation_steps=0, max_simultaneous_iterations=1)
+        training_steps=1, evaluation_steps=0, num_simultaneous_iterations=1)
     runner._checkpoint_experiment = test.mock.Mock()
     runner._log_experiment = test.mock.Mock()
     runner._save_tensorboard_summaries = test.mock.Mock()
@@ -147,7 +158,6 @@ class InternalIterationCounterTest(test.TestCase):
 
   def testCompletedIterationCounterIsUsed(self,):
     self.runner._completed_iteration = 20
-    self.runner._experience_queue.put(1)
     self.runner._run_one_iteration(iteration=36, eval_mode=False)
     self.runner._checkpoint_experiment.assert_called_once_with(20)
 
@@ -157,7 +167,6 @@ class InternalIterationCounterTest(test.TestCase):
 
   def testCompletedIterationCounterIsIncremented(self):
     self.runner._completed_iteration = 20
-    self.runner._experience_queue.put(1)
     self.runner._run_one_iteration(iteration=36, eval_mode=False)
     self.assertEqual(self.runner._completed_iteration, 21)
 
