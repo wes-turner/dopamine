@@ -1,5 +1,16 @@
 # Dopamine
 
+**WARNING: This branch contains an experimental, proof-of-concept implementation
+of asynchronous training.  It is offered here as proof of concept, only.  It
+will be followed by an implementation that's better engineered and integrated
+into the Dopamine codebase.**
+
+*This branch introduces AsyncRunner, an asynchronous extension of the Dopamine
+Runner from
+[dopamine/discrete_domains/run_experiment.py](dopamine/discrete_domains/run_experiment.py)
+to manage experiments.  See the [README](dopamine/discrete_domains/README.md) in
+that directory.*
+
 <div align="center">
   <img src="https://google.github.io/dopamine/images/dopamine_logo.png"><br><br>
 </div>
