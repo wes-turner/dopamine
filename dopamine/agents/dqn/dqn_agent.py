@@ -31,8 +31,6 @@ import tensorflow as tf
 
 import gin.tf
 
-slim = tf.contrib.slim
-
 
 # These are aliases which are used by other classes.
 NATURE_DQN_OBSERVATION_SHAPE = atari_lib.NATURE_DQN_OBSERVATION_SHAPE
@@ -73,8 +71,6 @@ def identity_epsilon(unused_decay_period, unused_step, unused_warmup_steps,
 
 
 @gin.configurable
-@threading_utils.local_attributes(['_last_observation', '_observation', 'state',
-                                   'action', 'eval_mode'])
 class DQNAgent(object):
   """An implementation of the DQN agent."""
 
@@ -95,8 +91,9 @@ class DQNAgent(object):
                epsilon_eval=0.001,
                epsilon_decay_period=250000,
                tf_device='/cpu:*',
+               eval_mode=False,
                use_staging=True,
-               max_tf_checkpoints_to_keep=3,
+               max_tf_checkpoints_to_keep=4,
                optimizer=tf.train.RMSPropOptimizer(
                    learning_rate=0.00025,
                    decay=0.95,
@@ -134,6 +131,7 @@ class DQNAgent(object):
       epsilon_eval: float, epsilon used when evaluating the agent.
       epsilon_decay_period: int, length of the epsilon decay schedule.
       tf_device: str, Tensorflow device on which the agent's graph is executed.
+      eval_mode: bool, True for evaluation and False for training.
       use_staging: bool, when True use a staging area to prefetch the next
         training batch, speeding training up by about 30%.
       max_tf_checkpoints_to_keep: int, the number of TensorFlow checkpoints to
@@ -205,7 +203,7 @@ class DQNAgent(object):
         _observation=lambda: None,
         _last_observation=lambda: None,
         state=lambda: np.zeros(state_shape),
-        eval_mode=lambda: False)
+        eval_mode=lambda: eval_mode)
 
   def _get_network_type(self):
     """Returns the type of the outputs of a Q value network.
@@ -499,7 +497,6 @@ class DQNAgent(object):
     self._replay.save(checkpoint_dir, iteration_number)
     bundle_dictionary = {}
     bundle_dictionary['state'] = self.state
-    bundle_dictionary['eval_mode'] = self.eval_mode
     bundle_dictionary['training_steps'] = self.training_steps
     return bundle_dictionary
 
@@ -513,7 +510,7 @@ class DQNAgent(object):
 
     Args:
       checkpoint_dir: str, path to the checkpoint saved by tf.Save.
-      iteration_number: int, checkpoint version, used when restoring replay
+      iteration_number: int, checkpoint version, used when restoring the replay
         buffer.
       bundle_dictionary: dict, containing additional Python objects owned by
         the agent.
@@ -527,9 +524,9 @@ class DQNAgent(object):
       self._replay.load(checkpoint_dir, iteration_number)
     except tf.errors.NotFoundError:
       return False
-    for key in bundle_dictionary:
-      if hasattr(self, key):
-        setattr(self, key, bundle_dictionary[key])
+    for key in self.__dict__:
+      if key in bundle_dictionary:
+        self.__dict__[key] = bundle_dictionary[key]
     # Restore the agent's TensorFlow graph.
     self._saver.restore(self._sess,
                         os.path.join(checkpoint_dir,
