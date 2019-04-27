@@ -242,7 +242,7 @@ class OutOfGraphReplayBuffer(object):
     for element_type in self.get_add_args_signature():
       zero_transition.append(
           np.zeros(element_type.shape, dtype=element_type.type))
-    self._add_transition_to_memory(*zero_transition)
+    self._add(*zero_transition)
 
   @lock_lib.locked_method()
   def add(self, observation, action, reward, terminal, *args):
@@ -266,9 +266,10 @@ class OutOfGraphReplayBuffer(object):
         extra_storage_types.
     """
     self._check_add_types(observation, action, reward, terminal, *args)
-    self._add(observation, action, reward, terminal, *args)
+    self._add_transition_to_buffer(observation, action, reward, terminal, *args)
 
-  def _add(self, observation, action, reward, terminal, *args):
+  def _add_transition_to_buffer(
+      self, observation, action, reward, terminal, *args):
     """Adds a transition to the trajectory buffer.
 
     Transitions are added to a trajectory. If `use_contiguous_trajectories` is
@@ -297,10 +298,10 @@ class OutOfGraphReplayBuffer(object):
         # zeros. This is useful when there is a priority argument.
         self._add_zero_transition()
     for step_args in self._trajectory:
-      self._add_transition_to_memory(*step_args)
+      self._add(*step_args)
     del self._trajectory
 
-  def _add_transition_to_memory(self, *args):
+  def _add(self, *args):
     """Internal add method to add to the storage arrays.
 
     Args:
