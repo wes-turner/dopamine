@@ -526,9 +526,12 @@ class DQNAgent(object):
       self._replay.load(checkpoint_dir, iteration_number)
     except tf.errors.NotFoundError:
       return False
-    for key in self.__dict__:
-      if key in bundle_dictionary:
-        self.__dict__[key] = bundle_dictionary[key]
+    for key in bundle_dictionary:
+      # Since some of self's attributes are emulated with
+      # threading_utils.local_attributes, we need to interact with them via
+      # hasattr/getattr/setattr than via self's __dict__.
+      if hasattr(self, key):
+        setattr(self, key, bundle_dictionary[key])
     # Restore the agent's TensorFlow graph.
     self._saver.restore(self._sess,
                         os.path.join(checkpoint_dir,
