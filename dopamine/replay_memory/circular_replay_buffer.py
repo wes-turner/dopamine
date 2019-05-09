@@ -50,7 +50,6 @@ STORE_FILENAME_PREFIX = '$store$_'
 
 # This constant determines how many iterations a checkpoint is kept for.
 CHECKPOINT_DURATION = 4
-MAX_SAMPLE_ATTEMPTS = 1000
 
 
 def invalid_range(cursor, replay_capacity, stack_size, update_horizon):
@@ -106,7 +105,7 @@ class OutOfGraphReplayBuffer(object):
                batch_size,
                update_horizon=1,
                gamma=0.99,
-               max_sample_attempts=MAX_SAMPLE_ATTEMPTS,
+               max_sample_attempts=1000,
                extra_storage_types=None,
                observation_dtype=np.uint8,
                action_shape=(),
@@ -485,10 +484,11 @@ class OutOfGraphReplayBuffer(object):
     attempt_count = 0
     while (len(indices) < batch_size and
            attempt_count < self._max_sample_attempts):
-      attempt_count += 1
       index = np.random.randint(min_id, max_id) % self._replay_capacity
       if self.is_valid_transition(index):
         indices.append(index)
+      else:
+        attempt_count += 1
     if len(indices) != batch_size:
       raise RuntimeError(
           'Max sample attempts: Tried {} times but only sampled {}'
@@ -734,7 +734,7 @@ class WrappedReplayBuffer(object):
                update_horizon=1,
                gamma=0.99,
                wrapped_memory=None,
-               max_sample_attempts=MAX_SAMPLE_ATTEMPTS,
+               max_sample_attempts=1000,
                extra_storage_types=None,
                observation_dtype=np.uint8,
                action_shape=(),
