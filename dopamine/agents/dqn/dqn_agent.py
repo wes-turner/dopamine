@@ -103,7 +103,8 @@ class DQNAgent(object):
                    epsilon=0.00001,
                    centered=True),
                summary_writer=None,
-               summary_writing_frequency=500):
+               summary_writing_frequency=500,
+               allow_partial_reload=False):
     """Initializes the agent and constructs the components of its graph.
 
     Args:
@@ -143,6 +144,8 @@ class DQNAgent(object):
         Summary writing disabled if set to None.
       summary_writing_frequency: int, frequency with which summaries will be
         written. Lower values will result in slower training.
+      allow_partial_reload: bool, whether we allow reloading a partial agent
+        (for instance, only the network parameters).
     """
     assert isinstance(observation_shape, tuple)
     tf.logging.info('Creating %s agent with the following parameters:',
@@ -178,6 +181,7 @@ class DQNAgent(object):
     self.optimizer = optimizer
     self.summary_writer = summary_writer
     self.summary_writing_frequency = summary_writing_frequency
+    self.allow_partial_reload = allow_partial_reload
 
     with tf.device(tf_device):
       # Create a placeholder for the state input to the DQN network.
@@ -522,16 +526,24 @@ class DQNAgent(object):
     """
     try:
       # self._replay.load() will throw a NotFoundError if it does not find all
-      # the necessary files, in which case we abort the process & return False.
+      # the necessary files.
       self._replay.load(checkpoint_dir, iteration_number)
     except tf.errors.NotFoundError:
+      if not self.allow_partial_reload:
+        # If we don't allow partial reloads, we will return False.
+        return False
+      tf.logging.warning('Unable to reload replay buffer!')
+    if bundle_dictionary is not None:
+      for key in bundle_dictionary:
+        # Since some of self's attributes are emulated with
+        # threading_utils.local_attributes, we need to interact with them via
+        # hasattr/getattr/setattr than via self's __dict__.
+        if hasattr(self, key):
+          setattr(self, key, bundle_dictionary[key])
+    elif not self.allow_partial_reload:
       return False
-    for key in bundle_dictionary:
-      # Since some of self's attributes are emulated with
-      # threading_utils.local_attributes, we need to interact with them via
-      # hasattr/getattr/setattr than via self's __dict__.
-      if hasattr(self, key):
-        setattr(self, key, bundle_dictionary[key])
+    else:
+      tf.logging.warning("Unable to reload the agent's parameters!")
     # Restore the agent's TensorFlow graph.
     self._saver.restore(self._sess,
                         os.path.join(checkpoint_dir,
